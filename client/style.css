@@ -145,16 +145,9 @@ input {
     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
     font-size: 0.9rem;
     animation: slideUp 0.3s ease-out, fadeOut 0.5s ease-in 4.5s forwards;
-    min-width: 300px;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.snackbar-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
+    min-width: 280px;
+    max-width: 90vw;
+    text-align: center;
 }
 
 .snackbar.error {
@@ -219,6 +212,44 @@ input {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 640px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .card {
+        padding: 1.5rem;
+    }
+    
+    .drop-zone {
+        padding: 2rem;
+    }
+    
+    .status-bar {
+        flex-direction: column;
+        gap: 5px;
+        font-size: 1rem;
+    }
+    
+    .file-info {
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        text-align: center;
+    }
+    
+    #file-name {
+        max-width: 100%;
+    }
+    
+    #settings-btn {
+        top: 10px;
+        right: 10px;
+        font-size: 1.2rem;
+    }
 }
 
 .drop-zone {

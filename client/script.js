@@ -240,6 +240,7 @@ function formatSize(bytes) {
 
 // --- File Transfer Logic ---
 const CHUNK_SIZE = 16384; 
+const BUFFER_THRESHOLD = 1024 * 1024; // 1MB threshold for better stability
 let receivedChunks = [];
 let receivingFileName = '';
 let receivingFileSize = 0;
@@ -262,20 +263,32 @@ async function sendFile(file) {
     const reader = new FileReader();
     let offset = 0;
 
-    const readNextChunk = () => {
-        const slice = file.slice(offset, offset + CHUNK_SIZE);
-        reader.readAsArrayBuffer(slice);
-    };
-
-    reader.onload = (e) => {
-        dataChannel.send(e.target.result);
-        offset += CHUNK_SIZE;
-        
-        const progress = Math.min(100, Math.floor((offset / file.size) * 100));
-        updateProgress(progress, offset, file.size);
+    const sendNextChunk = async () => {
+        // We use the onbufferedamountlow event internally by waiting if buffer is full
+        if (dataChannel.bufferedAmount > BUFFER_THRESHOLD) {
+            // Wait a bit and check again
+            setTimeout(sendNextChunk, 50);
+            return;
+        }
 
         if (offset < file.size) {
-            readNextChunk();
+            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            reader.onload = (e) => {
+                try {
+                    dataChannel.send(e.target.result);
+                    offset += CHUNK_SIZE;
+                    
+                    const progress = Math.min(100, Math.floor((offset / file.size) * 100));
+                    updateProgress(progress, offset, file.size);
+                    
+                    // Queue next chunk immediately
+                    sendNextChunk();
+                } catch (err) {
+                    console.error('Send error:', err);
+                    showSnackbar('Transfer failed due to network buffer error.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(slice);
         } else {
             progressFill.classList.add('complete');
             updateUIStatus('complete');
@@ -283,7 +296,7 @@ async function sendFile(file) {
         }
     };
 
-    readNextChunk();
+    sendNextChunk();
 }
 
 function handleIncomingData(data) {
