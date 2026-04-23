@@ -70,7 +70,7 @@ input {
 }
 
 .status-bar {
-    margin-bottom: 1rem;
+    margin-bottom: 2rem;
     font-size: 1.1rem;
     display: flex;
     justify-content: center;
@@ -81,14 +81,22 @@ input {
 .badge {
     background-color: #38bdf8;
     color: #0f172a;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.8rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
     font-weight: bold;
     text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 #progress-text {
+    margin-top: 0.5rem;
+    font-weight: 600;
+    color: #38bdf8;
+    font-variant-numeric: tabular-nums;
+}
+
+#settings-btn {
 
     margin-bottom: 1rem;
 }
@@ -131,14 +139,22 @@ input {
 .snackbar {
     background-color: #1e293b;
     color: white;
-    padding: 12px 24px;
-    border-radius: 8px;
-    border-left: 4px solid #38bdf8;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    padding: 12px 20px;
+    border-radius: 12px;
+    border-left: 6px solid #38bdf8;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
     font-size: 0.9rem;
     animation: slideUp 0.3s ease-out, fadeOut 0.5s ease-in 4.5s forwards;
-    min-width: 250px;
-    text-align: center;
+    min-width: 300px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.snackbar-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
 }
 
 .snackbar.error {
@@ -243,10 +259,18 @@ input {
     font-weight: 600;
 }
 
+#progress-container {
+    background-color: #1e293b;
+    padding: 2rem;
+    border-radius: 1rem;
+    margin-top: 2rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
 .file-info {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
     font-size: 0.9rem;
     color: #94a3b8;
 }
@@ -256,6 +280,8 @@ input {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 60%;
+    font-weight: 500;
+    color: #f8fafc;
 }
 
 .progress-bar {
@@ -285,4 +311,5 @@ input {
     margin-top: 0.5rem;
     font-weight: 600;
     color: #38bdf8;
+    text-align: right;
 }
