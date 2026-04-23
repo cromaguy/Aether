@@ -13,8 +13,20 @@
         <div class="modal-content">
             <h2>Settings</h2>
             <div class="setting-item">
-                <label>Verbose Mode (Technical Logs)</label>
-                <input type="checkbox" id="verbose-toggle">
+                <span>Verbose Mode (Technical Logs)</span>
+                <label class="switch">
+                    <input type="checkbox" id="verbose-toggle">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div class="setting-item">
+                <span>Accent Color</span>
+                <div class="color-picker">
+                    <div class="color-option active" style="background: #38bdf8;" data-color="#38bdf8"></div>
+                    <div class="color-option" style="background: #a855f7;" data-color="#a855f7"></div>
+                    <div class="color-option" style="background: #22c55e;" data-color="#22c55e"></div>
+                    <div class="color-option" style="background: #f97316;" data-color="#f97316"></div>
+                </div>
             </div>
             <button id="close-settings">Close</button>
         </div>
@@ -45,6 +57,7 @@
 
         <div id="transfer-section" class="hidden">
             <div class="status-bar">
+                <span id="connection-dot" class="dot"></span>
                 <span id="role-badge" class="badge">Connecting...</span>
                 Status: <span id="status">Connecting...</span>
             </div>

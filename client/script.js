@@ -24,6 +24,7 @@ const loader = document.getElementById('loader');
 const loaderText = document.getElementById('loader-text');
 const statusText = document.getElementById('status');
 const roleBadge = document.getElementById('role-badge');
+const connectionDot = document.getElementById('connection-dot');
 const roomDisplay = document.getElementById('room-display');
 const roomIdSpan = document.getElementById('room-id');
 const progressContainer = document.getElementById('progress-container');
@@ -97,6 +98,19 @@ verboseToggle.onchange = (e) => {
     isVerbose = e.target.checked;
 };
 
+document.querySelectorAll('.color-option').forEach(option => {
+    option.onclick = () => {
+        const color = option.getAttribute('data-color');
+        document.documentElement.style.setProperty('--accent-color', color);
+        
+        // Generate hover color (lighter version)
+        document.documentElement.style.setProperty('--accent-hover', color + 'CC');
+        
+        document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('active'));
+        option.classList.add('active');
+    };
+});
+
 async function processIceQueue() {
     while (iceCandidateQueue.length > 0 && pc && pc.remoteDescription) {
         const candidate = iceCandidateQueue.shift();
@@ -115,6 +129,18 @@ function initPeerConnection() {
     iceCandidateQueue = [];
     pc = new RTCPeerConnection(configuration);
     
+    pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        connectionDot.className = 'dot';
+        if (state === 'connected') {
+            connectionDot.classList.add('connected');
+        } else if (state === 'connecting') {
+            connectionDot.classList.add('connecting');
+        } else if (state === 'failed' || state === 'disconnected') {
+            connectionDot.classList.add('disconnected');
+        }
+    };
+
     pc.onicecandidate = (event) => {
         if (event.candidate && currentRoomID) {
             socket.emit('signal', { roomID: currentRoomID, signal: event.candidate });
@@ -240,7 +266,7 @@ function formatSize(bytes) {
 
 // --- File Transfer Logic ---
 const CHUNK_SIZE = 16384; 
-const BUFFER_THRESHOLD = 1024 * 1024; // 1MB threshold for better stability
+const BUFFER_THRESHOLD = 1024 * 1024; 
 let receivedChunks = [];
 let receivingFileName = '';
 let receivingFileSize = 0;
@@ -264,9 +290,7 @@ async function sendFile(file) {
     let offset = 0;
 
     const sendNextChunk = async () => {
-        // We use the onbufferedamountlow event internally by waiting if buffer is full
         if (dataChannel.bufferedAmount > BUFFER_THRESHOLD) {
-            // Wait a bit and check again
             setTimeout(sendNextChunk, 50);
             return;
         }
@@ -281,7 +305,6 @@ async function sendFile(file) {
                     const progress = Math.min(100, Math.floor((offset / file.size) * 100));
                     updateProgress(progress, offset, file.size);
                     
-                    // Queue next chunk immediately
                     sendNextChunk();
                 } catch (err) {
                     console.error('Send error:', err);
