@@ -3,49 +3,132 @@ const configuration = {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
 };
 
-let pc = new RTCPeerConnection(configuration);
+let pc = null;
 let dataChannel = null;
 let currentRoomID = null;
+let isVerbose = false;
+let userRole = '';
 
 const setupSection = document.getElementById('setup-section');
 const transferSection = document.getElementById('transfer-section');
+const loader = document.getElementById('loader');
+const loaderText = document.getElementById('loader-text');
 const statusText = document.getElementById('status');
+const roleBadge = document.getElementById('role-badge');
 const roomDisplay = document.getElementById('room-display');
 const roomIdSpan = document.getElementById('room-id');
 const progressContainer = document.getElementById('progress-container');
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
+const fileNameDisp = document.getElementById('file-name');
+const fileSizeDisp = document.getElementById('file-size');
 const dropZone = document.getElementById('drop-zone');
+const dropZoneText = document.getElementById('drop-zone-text');
 const fileInput = document.getElementById('file-input');
 
-// --- Room Management ---
+// Settings Elements
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettings = document.getElementById('close-settings');
+const verboseToggle = document.getElementById('verbose-toggle');
 
+const STATUS_MAP = {
+    'creating-room': { layman: 'Creating your secure room...', tech: 'Emitting create-room event to signaling server...' },
+    'joining-room': { layman: 'Connecting to room...', tech: 'Joining room and waiting for peer signal...' },
+    'handshake': { layman: 'Establishing direct connection...', tech: 'Performing WebRTC SDP handshake & ICE gathering...' },
+    'connecting-dc': { layman: 'Opening data pipeline...', tech: 'Initializing RTCDataChannel...' },
+    'connected': { layman: 'Connected! Ready to transfer.', tech: 'RTCPeerConnection state: connected. DataChannel open.' },
+    'waiting-file': { layman: 'Waiting for files...', tech: 'DataChannel idle. Listening for binary stream...' },
+    'sending': { layman: 'Sending file...', tech: 'Slicing file into 16KB chunks and streaming...' },
+    'receiving': { layman: 'Receiving file...', tech: 'Collecting binary chunks into Blob array...' },
+    'complete': { layman: 'Transfer complete!', tech: 'All chunks received. Blob reassembled and triggered.' }
+};
+
+function updateUIStatus(key, customLayman = null, customTech = null) {
+    const status = STATUS_MAP[key] || { layman: 'Processing...', tech: 'Unknown state...' };
+    const text = isVerbose ? (customTech || status.tech) : (customLayman || status.layman);
+    
+    if (!loader.classList.contains('hidden')) {
+        loaderText.textContent = text;
+    } else {
+        statusText.textContent = text;
+    }
+}
+
+function showLoader(statusKey) {
+    updateUIStatus(statusKey);
+    loader.classList.remove('hidden');
+}
+
+function hideLoader() {
+    loader.classList.add('hidden');
+}
+
+// --- Settings Logic ---
+settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+closeSettings.onclick = () => settingsModal.classList.add('hidden');
+verboseToggle.onchange = (e) => {
+    isVerbose = e.target.checked;
+};
+
+function initPeerConnection() {
+    if (pc) {
+        pc.close();
+    }
+    pc = new RTCPeerConnection(configuration);
+    
+    pc.onicecandidate = (event) => {
+        if (event.candidate && currentRoomID) {
+            socket.emit('signal', { roomID: currentRoomID, signal: event.candidate });
+        }
+    };
+
+    pc.ondatachannel = (event) => {
+        dataChannel = event.channel;
+        setupDataChannelEvents();
+    };
+}
+
+// --- Room Management ---
 document.getElementById('create-room-btn').onclick = () => {
+    showLoader('creating-room');
     socket.emit('create-room');
 };
 
 document.getElementById('join-room-btn').onclick = () => {
     const roomID = document.getElementById('join-room-input').value;
     if (roomID) {
+        showLoader('joining-room');
         currentRoomID = roomID;
+        initPeerConnection();
         socket.emit('join-room', roomID);
     }
 };
 
 socket.on('room-created', (roomID) => {
+    hideLoader();
+    userRole = 'Host/Sender';
     currentRoomID = roomID;
     roomIdSpan.textContent = roomID;
     roomDisplay.classList.remove('hidden');
-    setupDataChannel();
+    initPeerConnection();
+});
+
+socket.on('error', (msg) => {
+    hideLoader();
+    alert(msg);
 });
 
 socket.on('peer-joined', (peerId) => {
-    console.log('Peer joined:', peerId);
     createOffer();
 });
 
 socket.on('signal', async ({ signal, from }) => {
+    if (!pc) initPeerConnection();
+
     if (signal.type === 'offer') {
+        showLoader('handshake');
+        userRole = 'Guest/Receiver';
         await pc.setRemoteDescription(new RTCSessionDescription(signal));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -58,21 +141,8 @@ socket.on('signal', async ({ signal, from }) => {
 });
 
 // --- WebRTC Setup ---
-
-function setupDataChannel() {
-    pc.onicecandidate = (event) => {
-        if (event.candidate) {
-            socket.emit('signal', { roomID: currentRoomID, signal: event.candidate });
-        }
-    };
-
-    pc.ondatachannel = (event) => {
-        dataChannel = event.channel;
-        setupDataChannelEvents();
-    };
-}
-
 async function createOffer() {
+    showLoader('handshake');
     dataChannel = pc.createDataChannel('file-transfer');
     setupDataChannelEvents();
     
@@ -83,9 +153,12 @@ async function createOffer() {
 
 function setupDataChannelEvents() {
     dataChannel.onopen = () => {
-        statusText.textContent = 'Connected';
+        hideLoader();
+        roleBadge.textContent = userRole;
+        updateUIStatus('connected');
         setupSection.classList.add('hidden');
         transferSection.classList.remove('hidden');
+        updateUIStatus('waiting-file');
     };
 
     dataChannel.onclose = () => {
@@ -97,9 +170,16 @@ function setupDataChannelEvents() {
     };
 }
 
-// --- File Transfer Logic ---
+function formatSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
-const CHUNK_SIZE = 16384; // 16KB
+// --- File Transfer Logic ---
+const CHUNK_SIZE = 16384; 
 let receivedChunks = [];
 let receivingFileName = '';
 let receivingFileSize = 0;
@@ -113,6 +193,11 @@ async function sendFile(file) {
     });
     
     dataChannel.send(fileMetadata);
+    
+    fileNameDisp.textContent = file.name;
+    fileSizeDisp.textContent = `0 ${formatSize(file.size).split(' ')[1]} / ${formatSize(file.size)}`;
+    
+    updateUIStatus('sending', `Sending ${file.name}...`, `Streaming ${file.name} (${file.size} bytes)...`);
 
     const reader = new FileReader();
     let offset = 0;
@@ -127,12 +212,13 @@ async function sendFile(file) {
         offset += CHUNK_SIZE;
         
         const progress = Math.min(100, Math.floor((offset / file.size) * 100));
-        updateProgress(progress);
+        updateProgress(progress, offset, file.size);
 
         if (offset < file.size) {
             readNextChunk();
         } else {
-            progressText.textContent = 'Transfer Complete!';
+            progressFill.classList.add('complete');
+            updateUIStatus('complete');
         }
     };
 
@@ -145,35 +231,41 @@ function handleIncomingData(data) {
         receivingFileName = metadata.name;
         receivingFileSize = metadata.size;
         receivedChunks = [];
+        
+        fileNameDisp.textContent = receivingFileName;
+        fileSizeDisp.textContent = `0 ${formatSize(receivingFileSize).split(' ')[1]} / ${formatSize(receivingFileSize)}`;
+        
         progressContainer.classList.remove('hidden');
-        updateProgress(0);
+        updateProgress(0, 0, receivingFileSize);
+        updateUIStatus('receiving', `Receiving ${receivingFileName}...`, `Collecting chunks for ${receivingFileName}...`);
         return;
     }
 
     receivedChunks.push(data);
     const currentSize = receivedChunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
     const progress = Math.min(100, Math.floor((currentSize / receivingFileSize) * 100));
-    updateProgress(progress);
+    updateProgress(progress, currentSize, receivingFileSize);
 
     if (currentSize >= receivingFileSize) {
+        progressFill.classList.add('complete');
         const blob = new Blob(receivedChunks);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = receivingFileName;
         a.click();
-        progressText.textContent = 'File Received!';
+        updateUIStatus('complete');
     }
 }
 
-function updateProgress(percent) {
+function updateProgress(percent, current, total) {
     progressContainer.classList.remove('hidden');
     progressFill.style.width = percent + '%';
     progressText.textContent = percent + '%';
+    fileSizeDisp.textContent = `${formatSize(current)} / ${formatSize(total)}`;
 }
 
 // --- UI Event Listeners ---
-
 dropZone.onclick = () => fileInput.click();
 fileInput.onchange = (e) => {
     if (e.target.files[0]) sendFile(e.target.files[0]);
@@ -181,15 +273,19 @@ fileInput.onchange = (e) => {
 
 dropZone.ondragover = (e) => {
     e.preventDefault();
+    dropZone.classList.add('drag-over');
     dropZone.style.backgroundColor = '#1e293b';
 };
 
 dropZone.ondragleave = () => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
     dropZone.style.backgroundColor = 'transparent';
 };
 
 dropZone.ondrop = (e) => {
     e.preventDefault();
+    dropZone.classList.remove('drag-over');
     dropZone.style.backgroundColor = 'transparent';
     if (e.dataTransfer.files[0]) sendFile(e.dataTransfer.files[0]);
 };

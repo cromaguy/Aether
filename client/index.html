@@ -7,6 +7,19 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="settings-btn" title="Settings">⚙️</div>
+    
+    <div id="settings-modal" class="hidden">
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div class="setting-item">
+                <label>Verbose Mode (Technical Logs)</label>
+                <input type="checkbox" id="verbose-toggle">
+            </div>
+            <button id="close-settings">Close</button>
+        </div>
+    </div>
+
     <div class="container">
         <h1>Aether P2P</h1>
         
@@ -23,15 +36,28 @@
             </div>
         </div>
 
+        <div id="loader" class="hidden">
+            <div class="spinner"></div>
+            <p id="loader-text">Processing...</p>
+        </div>
+
         <div id="transfer-section" class="hidden">
             <div class="status-bar">
+                <span id="role-badge" class="badge">Connecting...</span>
                 Status: <span id="status">Connecting...</span>
             </div>
             <div class="drop-zone" id="drop-zone">
-                <p>Drag & Drop file here or click to upload</p>
+                <div class="drop-zone-content">
+                    <div class="upload-icon">📁</div>
+                    <p id="drop-zone-text">Drag & Drop file here or <span>browse</span></p>
+                </div>
                 <input type="file" id="file-input" hidden>
             </div>
             <div id="progress-container" class="hidden">
+                <div class="file-info">
+                    <span id="file-name">Filename.ext</span>
+                    <span id="file-size">0 MB / 0 MB</span>
+                </div>
                 <div class="progress-bar">
                     <div id="progress-fill"></div>
                 </div>
@@ -39,7 +65,8 @@
             </div>
         </div>
     </div>
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>
