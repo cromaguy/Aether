@@ -1,6 +1,12 @@
 const socket = io('https://aether-jvts.onrender.com');
 const configuration = {
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.stunprotocol.org:3478' },
+        { urls: 'stun:stun.stunprotocol.org:5349' }
+    ]
 };
 
 let pc = null;
@@ -8,6 +14,7 @@ let dataChannel = null;
 let currentRoomID = null;
 let isVerbose = false;
 let userRole = '';
+let iceCandidateQueue = [];
 
 const setupSection = document.getElementById('setup-section');
 const transferSection = document.getElementById('transfer-section');
@@ -71,10 +78,22 @@ verboseToggle.onchange = (e) => {
     isVerbose = e.target.checked;
 };
 
+async function processIceQueue() {
+    while (iceCandidateQueue.length > 0 && pc && pc.remoteDescription) {
+        const candidate = iceCandidateQueue.shift();
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+            console.error('Error adding queued ICE candidate', e);
+        }
+    }
+}
+
 function initPeerConnection() {
     if (pc) {
         pc.close();
     }
+    iceCandidateQueue = [];
     pc = new RTCPeerConnection(configuration);
     
     pc.onicecandidate = (event) => {
@@ -129,14 +148,28 @@ socket.on('signal', async ({ signal, from }) => {
     if (signal.type === 'offer') {
         showLoader('handshake');
         userRole = 'Guest/Receiver';
-        await pc.setRemoteDescription(new RTCSessionDescription(signal));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('signal', { roomID: currentRoomID, signal: pc.localDescription });
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+            await processIceQueue();
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('signal', { roomID: currentRoomID, signal: pc.localDescription });
+        } catch (e) {
+            console.error('Offer handling failed', e);
+        }
     } else if (signal.type === 'answer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(signal));
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+            await processIceQueue();
+        } catch (e) {
+            console.error('Answer handling failed', e);
+        }
     } else if (signal.candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(signal));
+        if (pc && pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal));
+        } else {
+            iceCandidateQueue.push(signal);
+        }
     }
 });
 
@@ -146,9 +179,13 @@ async function createOffer() {
     dataChannel = pc.createDataChannel('file-transfer');
     setupDataChannelEvents();
     
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('signal', { roomID: currentRoomID, signal: pc.localDescription });
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('signal', { roomID: currentRoomID, signal: pc.localDescription });
+    } catch (e) {
+        console.error('Offer creation failed', e);
+    }
 }
 
 function setupDataChannelEvents() {
