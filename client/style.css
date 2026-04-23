@@ -1,0 +1,107 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #0f172a;
+    color: #f8fafc;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+.container {
+    text-align: center;
+    max-width: 600px;
+    width: 90%;
+}
+
+h1 {
+    font-size: 3rem;
+    margin-bottom: 2rem;
+    color: #38bdf8;
+}
+
+.card {
+    background-color: #1e293b;
+    padding: 2rem;
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+button {
+    background-color: #38bdf8;
+    color: #0f172a;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: #7dd3fc;
+}
+
+input {
+    background-color: #334155;
+    color: white;
+    border: 1px solid #475569;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    margin-right: 0.5rem;
+    font-size: 1rem;
+}
+
+.hidden {
+    display: none;
+}
+
+#room-display {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+#room-id {
+    color: #38bdf8;
+}
+
+.status-bar {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.drop-zone {
+    border: 2px dashed #38bdf8;
+    border-radius: 1rem;
+    padding: 3rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.drop-zone:hover {
+    background-color: #1e293b;
+}
+
+.progress-bar {
+    background-color: #334155;
+    border-radius: 0.5rem;
+    height: 1rem;
+    width: 100%;
+    margin: 1rem 0;
+    overflow: hidden;
+}
+
+#progress-fill {
+    background-color: #38bdf8;
+    height: 100%;
+    width: 0%;
+    transition: width 0.1s;
+}
+
+#progress-text {
+    margin-bottom: 1rem;
+}

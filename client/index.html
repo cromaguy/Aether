@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether P2P File Transfer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Aether P2P</h1>
+        
+        <div id="setup-section">
+            <div class="card">
+                <h2>Create a Room</h2>
+                <button id="create-room-btn">Create Room</button>
+                <p id="room-display" class="hidden">Your Room Code: <span id="room-id"></span></p>
+            </div>
+            <div class="card">
+                <h2>Join a Room</h2>
+                <input type="text" id="join-room-input" placeholder="Enter Room Code">
+                <button id="join-room-btn">Join Room</button>
+            </div>
+        </div>
+
+        <div id="transfer-section" class="hidden">
+            <div class="status-bar">
+                Status: <span id="status">Connecting...</span>
+            </div>
+            <div class="drop-zone" id="drop-zone">
+                <p>Drag & Drop file here or click to upload</p>
+                <input type="file" id="file-input" hidden>
+            </div>
+            <div id="progress-container" class="hidden">
+                <div class="progress-bar">
+                    <div id="progress-fill"></div>
+                </div>
+                <p id="progress-text">0%</p>
+            </div>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
