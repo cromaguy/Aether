@@ -5,7 +5,8 @@ const configuration = {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.stunprotocol.org:3478' },
-        { urls: 'stun:stun.stunprotocol.org:5349' }
+        { urls: 'stun:stun.stunprotocol.org:5349' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
     ]
 };
 
@@ -15,6 +16,7 @@ let currentRoomID = null;
 let isVerbose = false;
 let userRole = '';
 let iceCandidateQueue = [];
+let handshakeTimer = null;
 
 const setupSection = document.getElementById('setup-section');
 const transferSection = document.getElementById('transfer-section');
@@ -51,6 +53,15 @@ const STATUS_MAP = {
     'complete': { layman: 'Transfer complete!', tech: 'All chunks received. Blob reassembled and triggered.' }
 };
 
+function showSnackbar(message, type = 'info') {
+    const container = document.getElementById('snackbar-container');
+    const snack = document.createElement('div');
+    snack.className = `snackbar ${type}`;
+    snack.textContent = message;
+    container.appendChild(snack);
+    setTimeout(() => snack.remove(), 5000);
+}
+
 function updateUIStatus(key, customLayman = null, customTech = null) {
     const status = STATUS_MAP[key] || { layman: 'Processing...', tech: 'Unknown state...' };
     const text = isVerbose ? (customTech || status.tech) : (customLayman || status.layman);
@@ -65,10 +76,18 @@ function updateUIStatus(key, customLayman = null, customTech = null) {
 function showLoader(statusKey) {
     updateUIStatus(statusKey);
     loader.classList.remove('hidden');
+    
+    if (statusKey === 'handshake') {
+        if (handshakeTimer) clearTimeout(handshakeTimer);
+        handshakeTimer = setTimeout(() => {
+            showSnackbar('Connection taking longer than usual... this may be due to strict firewall/NAT settings.', 'error');
+        }, 15000);
+    }
 }
 
 function hideLoader() {
     loader.classList.add('hidden');
+    if (handshakeTimer) clearTimeout(handshakeTimer);
 }
 
 // --- Settings Logic ---
@@ -131,14 +150,16 @@ socket.on('room-created', (roomID) => {
     roomIdSpan.textContent = roomID;
     roomDisplay.classList.remove('hidden');
     initPeerConnection();
+    showSnackbar('Room created successfully!', 'success');
 });
 
 socket.on('error', (msg) => {
     hideLoader();
-    alert(msg);
+    showSnackbar(msg, 'error');
 });
 
 socket.on('peer-joined', (peerId) => {
+    showSnackbar('A peer has joined the room!', 'success');
     createOffer();
 });
 
@@ -196,10 +217,12 @@ function setupDataChannelEvents() {
         setupSection.classList.add('hidden');
         transferSection.classList.remove('hidden');
         updateUIStatus('waiting-file');
+        showSnackbar('Direct P2P connection established!', 'success');
     };
 
     dataChannel.onclose = () => {
         statusText.textContent = 'Disconnected';
+        showSnackbar('Connection closed by peer.', 'error');
     };
 
     dataChannel.onmessage = (event) => {
@@ -256,6 +279,7 @@ async function sendFile(file) {
         } else {
             progressFill.classList.add('complete');
             updateUIStatus('complete');
+            showSnackbar('File sent successfully!', 'success');
         }
     };
 
@@ -275,6 +299,7 @@ function handleIncomingData(data) {
         progressContainer.classList.remove('hidden');
         updateProgress(0, 0, receivingFileSize);
         updateUIStatus('receiving', `Receiving ${receivingFileName}...`, `Collecting chunks for ${receivingFileName}...`);
+        showSnackbar(`Peer started sending: ${receivingFileName}`, 'info');
         return;
     }
 
@@ -292,6 +317,7 @@ function handleIncomingData(data) {
         a.download = receivingFileName;
         a.click();
         updateUIStatus('complete');
+        showSnackbar('File received successfully!', 'success');
     }
 }
 
