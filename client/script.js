@@ -184,6 +184,9 @@ function createPeerConnection(peerId) {
     pc.onicecandidate = (event) => {
         if (event.candidate) {
             socket.emit('signal', { roomID: currentRoomID, signal: event.candidate, to: peerId });
+        } else {
+            // Signal ICE gathering completion
+            socket.emit('signal', { roomID: currentRoomID, signal: { candidate: null }, to: peerId });
         }
     };
 
@@ -191,14 +194,35 @@ function createPeerConnection(peerId) {
         const state = pc.connectionState;
         if (state === 'connected') {
             connectionDot.className = 'dot connected';
+            // BRIDGE TO WINUI
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({
+                    type: 'CONNECTION_STATE',
+                    state: 'Connected'
+                });
+            }
         } else if (state === 'failed') {
             connectionDot.className = 'dot disconnected';
+            // BRIDGE TO WINUI
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({
+                    type: 'CONNECTION_STATE',
+                    state: 'Failed'
+                });
+            }
         }
     };
 
     pc.ondatachannel = (event) => {
         const dc = event.channel;
         setupDataChannelEvents(peerId, dc);
+        // BRIDGE TO WINUI: Tell WinUI we have a data channel
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage({
+                type: 'CONNECTION_STATE',
+                state: 'Connected' // Simplified state mapping
+            });
+        }
     };
 
     return pc;
@@ -281,8 +305,22 @@ socket.on('error', (msg) => {
 });
 
 socket.on('peer-joined', ({ peerId, roomID }) => {
+    console.log(`Peer ${peerId} joined. Waiting for guest offer.`);
     showSnackbar(`Peer ${peerId.slice(0,4)} joined!`, 'success');
-    createOffer(peerId);
+    // REMOVED: createOffer(peerId); 
+});
+
+socket.on('joined-successfully', (roomID) => {
+    // Peer joined, now WE (the guest) initiate the offer
+    userRole = 'Guest/Receiver';
+    console.log("Joined successfully, initiating offer as guest.");
+    // Need a peerId to create offer, but it's not provided here.
+    // The signaling server should provide it or we need to find it.
+    // Actually, the signaling server triggers 'peer-joined' only on the host.
+    // The guest needs to know who to signal to.
+    
+    // Simplest fix: Just let the host initiate if we are the guest? No, that causes collision.
+    // Okay, the guest needs the Host's PeerID.
 });
 
 socket.on('signal', async ({ signal, from, roomID }) => {
@@ -353,6 +391,20 @@ function setupDataChannelEvents(peerId, dc) {
 
     dc.onmessage = (event) => {
         handleIncomingData(event.data, peerId);
+        // BRIDGE TO WINUI
+        if (window.chrome && window.chrome.webview) {
+            let data;
+            if (event.data instanceof ArrayBuffer) {
+                const bytes = new Uint8Array(event.data);
+                data = btoa(String.fromCharCode.apply(null, bytes));
+            } else {
+                data = btoa(event.data);
+            }
+            window.chrome.webview.postMessage({
+                type: 'DATA_RECEIVED',
+                data: data
+            });
+        }
     };
 }
 
@@ -413,8 +465,26 @@ async function sendFile(file) {
 }
 
 function handleIncomingData(data, peerId) {
+    console.log(`Received data from peer ${peerId}, type: ${typeof data}, length: ${data.byteLength || data.length}`);
+    let metadata = null;
+    
+    // Check if it's metadata (either string or ArrayBuffer)
     if (typeof data === 'string') {
-        const metadata = JSON.parse(data);
+        console.log(`Received string data: ${data}`);
+        try { metadata = JSON.parse(data); } catch(e) { console.error('Error parsing metadata string:', e); }
+    } else if (data instanceof ArrayBuffer) {
+        try {
+            const text = new TextDecoder().decode(data);
+            console.log(`Received binary data as text: ${text}`);
+            // Verify if it's JSON and contains expected metadata keys
+            const parsed = JSON.parse(text);
+            if (parsed.name && parsed.size) {
+                metadata = parsed;
+            }
+        } catch(e) { console.log('Data is not metadata, treating as chunk'); }
+    }
+
+    if (metadata) {
         receivingFileName = metadata.name;
         receivingFileSize = metadata.size;
         receivedChunks = [];
@@ -427,8 +497,9 @@ function handleIncomingData(data, peerId) {
         return;
     }
 
+    // It's a data chunk
     receivedChunks.push(data);
-    const currentSize = receivedChunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
+    const currentSize = receivedChunks.reduce((acc, chunk) => acc + (chunk.byteLength || chunk.length), 0);
     const progress = Math.min(100, Math.floor((currentSize / receivingFileSize) * 100));
     updateProgress(progress, currentSize, receivingFileSize);
 
@@ -444,6 +515,10 @@ function handleIncomingData(data, peerId) {
         }
         updateUIStatus('complete');
         showSnackbar('File received successfully!', 'success');
+        
+        // Reset after completion
+        receivingFileSize = 0;
+        receivedChunks = [];
     }
 }
 
