@@ -12,22 +12,61 @@
     <div id="settings-modal" class="hidden">
         <div class="modal-content">
             <h2>Settings</h2>
-            <div class="setting-item">
-                <span>Verbose Mode (Technical Logs)</span>
-                <label class="switch">
-                    <input type="checkbox" id="verbose-toggle">
-                    <span class="slider round"></span>
-                </label>
-            </div>
-            <div class="setting-item">
-                <span>Accent Color</span>
-                <div class="color-picker">
-                    <div class="color-option active" style="background: #38bdf8;" data-color="#38bdf8"></div>
-                    <div class="color-option" style="background: #a855f7;" data-color="#a855f7"></div>
-                    <div class="color-option" style="background: #22c55e;" data-color="#22c55e"></div>
-                    <div class="color-option" style="background: #f97316;" data-color="#f97316"></div>
+            
+            <div class="settings-group">
+                <h3>General</h3>
+                <div class="setting-item">
+                    <span>Verbose Mode</span>
+                    <label class="switch">
+                        <input type="checkbox" id="verbose-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <span>Accent Color</span>
+                    <div class="color-picker">
+                        <div class="color-option active" style="background: #38bdf8;" data-color="#38bdf8"></div>
+                        <div class="color-option" style="background: #a855f7;" data-color="#a855f7"></div>
+                        <div class="color-option" style="background: #22c55e;" data-color="#22c55e"></div>
+                        <div class="color-option" style="background: #f97316;" data-color="#f97316"></div>
+                    </div>
                 </div>
             </div>
+
+            <div class="settings-group">
+                <h3>Network & Transfer</h3>
+                <div class="setting-item">
+                    <span>Chunk Size</span>
+                    <select id="chunk-size-select">
+                        <option value="16384">16 KB (Stable)</option>
+                        <option value="65536">64 KB (Balanced)</option>
+                        <option value="262144">256 KB (Fast)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <span>Buffer Limit</span>
+                    <select id="buffer-limit-select">
+                        <option value="1048576">1 MB (Safe)</option>
+                        <option value="5242880">5 MB (Normal)</option>
+                        <option value="16777216">16 MB (Aggressive)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <span>Auto-Download</span>
+                    <label class="switch">
+                        <input type="checkbox" id="auto-download-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="host-settings" class="settings-group hidden">
+                <h3>Room Control (Host)</h3>
+                <div class="setting-item">
+                    <button id="disconnect-peer-btn" class="btn-danger">Disconnect Peer</button>
+                </div>
+            </div>
+
             <button id="close-settings">Close</button>
         </div>
     </div>
@@ -40,12 +79,31 @@
         <div id="setup-section">
             <div class="card">
                 <h2>Create a Room</h2>
+                <div class="setup-inputs">
+                    <div class="input-group">
+                        <label>Max Peers</label>
+                        <input type="number" id="create-max-peers" value="2" min="2" max="10">
+                    </div>
+                    <div class="input-group">
+                        <label>Password (Optional)</label>
+                        <input type="password" id="create-password" placeholder="Set password">
+                    </div>
+                </div>
                 <button id="create-room-btn">Create Room</button>
                 <p id="room-display" class="hidden">Your Room Code: <span id="room-id"></span></p>
             </div>
             <div class="card">
                 <h2>Join a Room</h2>
-                <input type="text" id="join-room-input" placeholder="Enter Room Code">
+                <div class="setup-inputs">
+                    <div class="input-group">
+                        <label>Room Code</label>
+                        <input type="text" id="join-room-input" placeholder="Enter Code">
+                    </div>
+                    <div id="join-password-group" class="input-group hidden">
+                        <label>Password</label>
+                        <input type="password" id="join-password" placeholder="Enter Password">
+                    </div>
+                </div>
                 <button id="join-room-btn">Join Room</button>
             </div>
         </div>

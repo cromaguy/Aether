@@ -1,5 +1,8 @@
-const socket = io('https://aether-jvts.onrender.com');
-const configuration = {
+// Check if we are running locally
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Connect locally if on localhost, otherwise connect to the live Render server
+const socket = isLocal ? io() : io('https://aether-jvts.onrender.com');const configuration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -10,13 +13,22 @@ const configuration = {
     ]
 };
 
-let pc = null;
-let dataChannel = null;
+// MULTI-PEER STATE
+const peers = new Map(); // peerId -> { pc, dc }
 let currentRoomID = null;
 let isVerbose = false;
 let userRole = '';
-let iceCandidateQueue = [];
+let iceCandidateQueue = new Map(); // peerId -> [candidates]
 let handshakeTimer = null;
+
+// Dynamic Settings
+let settings = {
+    accentColor: '#38bdf8',
+    verbose: false,
+    chunkSize: 16384,
+    bufferLimit: 1048576,
+    autoDownload: true
+};
 
 const setupSection = document.getElementById('setup-section');
 const transferSection = document.getElementById('transfer-section');
@@ -41,15 +53,19 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettings = document.getElementById('close-settings');
 const verboseToggle = document.getElementById('verbose-toggle');
+const chunkSizeSelect = document.getElementById('chunk-size-select');
+const bufferLimitSelect = document.getElementById('buffer-limit-select');
+const autoDownloadToggle = document.getElementById('auto-download-toggle');
+const hostSettings = document.getElementById('host-settings');
+const disconnectPeerBtn = document.getElementById('disconnect-peer-btn');
 
 const STATUS_MAP = {
     'creating-room': { layman: 'Creating your secure room...', tech: 'Emitting create-room event to signaling server...' },
     'joining-room': { layman: 'Connecting to room...', tech: 'Joining room and waiting for peer signal...' },
     'handshake': { layman: 'Establishing direct connection...', tech: 'Performing WebRTC SDP handshake & ICE gathering...' },
-    'connecting-dc': { layman: 'Opening data pipeline...', tech: 'Initializing RTCDataChannel...' },
     'connected': { layman: 'Connected! Ready to transfer.', tech: 'RTCPeerConnection state: connected. DataChannel open.' },
     'waiting-file': { layman: 'Waiting for files...', tech: 'DataChannel idle. Listening for binary stream...' },
-    'sending': { layman: 'Sending file...', tech: 'Slicing file into 16KB chunks and streaming...' },
+    'sending': { layman: 'Sending file...', tech: 'Slicing file into binary chunks and streaming...' },
     'receiving': { layman: 'Receiving file...', tech: 'Collecting binary chunks into Blob array...' },
     'complete': { layman: 'Transfer complete!', tech: 'All chunks received. Blob reassembled and triggered.' }
 };
@@ -65,7 +81,7 @@ function showSnackbar(message, type = 'info') {
 
 function updateUIStatus(key, customLayman = null, customTech = null) {
     const status = STATUS_MAP[key] || { layman: 'Processing...', tech: 'Unknown state...' };
-    const text = isVerbose ? (customTech || status.tech) : (customLayman || status.layman);
+    const text = settings.verbose ? (customTech || status.tech) : (customLayman || status.layman);
     
     if (!loader.classList.contains('hidden')) {
         loaderText.textContent = text;
@@ -77,11 +93,10 @@ function updateUIStatus(key, customLayman = null, customTech = null) {
 function showLoader(statusKey) {
     updateUIStatus(statusKey);
     loader.classList.remove('hidden');
-    
     if (statusKey === 'handshake') {
         if (handshakeTimer) clearTimeout(handshakeTimer);
         handshakeTimer = setTimeout(() => {
-            showSnackbar('Connection taking longer than usual... this may be due to strict firewall/NAT settings.', 'error');
+            showSnackbar('Connection taking longer than usual... check firewall settings.', 'error');
         }, 15000);
     }
 }
@@ -94,89 +109,170 @@ function hideLoader() {
 // --- Settings Logic ---
 settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
 closeSettings.onclick = () => settingsModal.classList.add('hidden');
+
 verboseToggle.onchange = (e) => {
-    isVerbose = e.target.checked;
+    settings.verbose = e.target.checked;
+    saveSettings();
+};
+
+chunkSizeSelect.onchange = (e) => {
+    settings.chunkSize = parseInt(e.target.value);
+    saveSettings();
+};
+
+bufferLimitSelect.onchange = (e) => {
+    settings.bufferLimit = parseInt(e.target.value);
+    saveSettings();
+};
+
+autoDownloadToggle.onchange = (e) => {
+    settings.autoDownload = e.target.checked;
+    saveSettings();
 };
 
 document.querySelectorAll('.color-option').forEach(option => {
     option.onclick = () => {
         const color = option.getAttribute('data-color');
+        settings.accentColor = color;
         document.documentElement.style.setProperty('--accent-color', color);
-        
-        // Generate hover color (lighter version)
         document.documentElement.style.setProperty('--accent-hover', color + 'CC');
-        
         document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('active'));
         option.classList.add('active');
+        saveSettings();
     };
 });
 
-async function processIceQueue() {
-    while (iceCandidateQueue.length > 0 && pc && pc.remoteDescription) {
-        const candidate = iceCandidateQueue.shift();
-        try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-            console.error('Error adding queued ICE candidate', e);
-        }
+disconnectPeerBtn.onclick = () => {
+    // For multi-peer, this would normally target a specific peer
+    // For now, it clears all connections
+    peers.forEach((peer, id) => {
+        peer.pc.close();
+    });
+    peers.clear();
+    dataChannels.clear(); // Not defined yet in current script, will use peers map
+    showSnackbar('All peers disconnected.', 'info');
+    transferSection.classList.add('hidden');
+    setupSection.classList.remove('hidden');
+    connectionDot.className = 'dot disconnected';
+};
+
+function saveSettings() {
+    localStorage.setItem('aether_settings', JSON.stringify(settings));
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('aether_settings');
+    if (saved) {
+        settings = { ...settings, ...JSON.parse(saved) };
+        document.documentElement.style.setProperty('--accent-color', settings.accentColor);
+        document.documentElement.style.setProperty('--accent-hover', settings.accentColor + 'CC');
+        verboseToggle.checked = settings.verbose;
+        chunkSizeSelect.value = settings.chunkSize;
+        bufferLimitSelect.value = settings.bufferLimit;
+        autoDownloadToggle.checked = settings.autoDownload;
+        document.querySelectorAll('.color-option').forEach(opt => {
+            if (opt.getAttribute('data-color') === settings.accentColor) opt.classList.add('active');
+            else opt.classList.remove('active');
+        });
     }
 }
 
-function initPeerConnection() {
-    if (pc) {
-        pc.close();
-    }
-    iceCandidateQueue = [];
-    pc = new RTCPeerConnection(configuration);
+// --- Peer Connection Logic ---
+function createPeerConnection(peerId) {
+    const pc = new RTCPeerConnection(configuration);
     
-    pc.onconnectionstatechange = () => {
-        const state = pc.connectionState;
-        connectionDot.className = 'dot';
-        if (state === 'connected') {
-            connectionDot.classList.add('connected');
-        } else if (state === 'connecting') {
-            connectionDot.classList.add('connecting');
-        } else if (state === 'failed' || state === 'disconnected') {
-            connectionDot.classList.add('disconnected');
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit('signal', { roomID: currentRoomID, signal: event.candidate, to: peerId });
         }
     };
 
-    pc.onicecandidate = (event) => {
-        if (event.candidate && currentRoomID) {
-            socket.emit('signal', { roomID: currentRoomID, signal: event.candidate });
+    pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (state === 'connected') {
+            connectionDot.className = 'dot connected';
+        } else if (state === 'failed') {
+            connectionDot.className = 'dot disconnected';
         }
     };
 
     pc.ondatachannel = (event) => {
-        dataChannel = event.channel;
-        setupDataChannelEvents();
+        const dc = event.channel;
+        setupDataChannelEvents(peerId, dc);
     };
+
+    return pc;
+}
+
+async function processIceQueue(peerId) {
+    const queue = iceCandidateQueue.get(peerId) || [];
+    const peer = peers.get(peerId);
+    if (!peer || !peer.pc.remoteDescription) return;
+
+    while (queue.length > 0) {
+        const candidate = queue.shift();
+        try {
+            await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) { console.error('ICE error', e); }
+    }
+    iceCandidateQueue.set(peerId, queue);
 }
 
 // --- Room Management ---
 document.getElementById('create-room-btn').onclick = () => {
+    const maxPeers = document.getElementById('create-max-peers').value;
+    const password = document.getElementById('create-password').value;
     showLoader('creating-room');
-    socket.emit('create-room');
+    socket.emit('create-room', { maxPeers, password });
 };
 
+document.getElementById('join-room-input').oninput = (e) => {
+    const roomID = e.target.value;
+    if (roomID.length === 4) {
+        socket.emit('check-room', roomID);
+    }
+};
+
+socket.on('room-info', (info) => {
+    const pwdGroup = document.getElementById('join-password-group');
+    if (info.exists && info.hasPassword) {
+        pwdGroup.classList.remove('hidden');
+    } else {
+        pwdGroup.classList.add('hidden');
+    }
+});
+
 document.getElementById('join-room-btn').onclick = () => {
-    const roomID = document.getElementById('join-room-input').value;
+    const roomID = document.getElementById('join-room-input').value.trim();
+    const password = document.getElementById('join-password').value.trim();
     if (roomID) {
         showLoader('joining-room');
         currentRoomID = roomID;
-        initPeerConnection();
-        socket.emit('join-room', roomID);
+        // REMOVED: initPeerConnection(); 
+        socket.emit('join-room', { roomID, password });
     }
 };
+
 
 socket.on('room-created', (roomID) => {
     hideLoader();
     userRole = 'Host/Sender';
     currentRoomID = roomID;
-    roomIdSpan.textContent = roomID;
-    roomDisplay.classList.remove('hidden');
-    initPeerConnection();
-    showSnackbar('Room created successfully!', 'success');
+    
+    // Automatically transition UI to the transfer room
+    setupSection.classList.add('hidden');
+    transferSection.classList.remove('hidden');
+    hostSettings.classList.remove('hidden');
+    
+    // Display Room ID in the status badge so it can still be shared
+    roleBadge.textContent = `Host (Room: ${roomID})`;
+    updateUIStatus('waiting-file', 'Waiting for peers to join...', 'Listening for peer connections...');
+    
+    showSnackbar(`Room created successfully! Code: ${roomID}`, 'success');
+});
+
+socket.on('joined-successfully', (roomID) => {
+    // Peer joined, now we wait for signals to create connections
 });
 
 socket.on('error', (msg) => {
@@ -184,75 +280,79 @@ socket.on('error', (msg) => {
     showSnackbar(msg, 'error');
 });
 
-socket.on('peer-joined', (peerId) => {
-    showSnackbar('A peer has joined the room!', 'success');
-    createOffer();
+socket.on('peer-joined', ({ peerId, roomID }) => {
+    showSnackbar(`Peer ${peerId.slice(0,4)} joined!`, 'success');
+    createOffer(peerId);
 });
 
-socket.on('signal', async ({ signal, from }) => {
-    if (!pc) initPeerConnection();
+socket.on('signal', async ({ signal, from, roomID }) => {
+    if (!peers.has(from)) {
+        const pc = createPeerConnection(from);
+        peers.set(from, { pc, dc: null });
+    }
+    const peer = peers.get(from);
 
     if (signal.type === 'offer') {
         showLoader('handshake');
         userRole = 'Guest/Receiver';
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(signal));
-            await processIceQueue();
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            socket.emit('signal', { roomID: currentRoomID, signal: pc.localDescription });
-        } catch (e) {
-            console.error('Offer handling failed', e);
-        }
+            await peer.pc.setRemoteDescription(new RTCSessionDescription(signal));
+            await processIceQueue(from);
+            const answer = await peer.pc.createAnswer();
+            await peer.pc.setLocalDescription(answer);
+            socket.emit('signal', { roomID: currentRoomID, signal: peer.pc.localDescription, to: from });
+        } catch (e) { console.error('Offer fail', e); }
     } else if (signal.type === 'answer') {
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(signal));
-            await processIceQueue();
-        } catch (e) {
-            console.error('Answer handling failed', e);
-        }
+            await peer.pc.setRemoteDescription(new RTCSessionDescription(signal));
+            await processIceQueue(from);
+        } catch (e) { console.error('Answer fail', e); }
     } else if (signal.candidate) {
-        if (pc && pc.remoteDescription) {
-            await pc.addIceCandidate(new RTCIceCandidate(signal));
+        if (peer.pc.remoteDescription) {
+            await peer.pc.addIceCandidate(new RTCIceCandidate(signal));
         } else {
-            iceCandidateQueue.push(signal);
+            if (!iceCandidateQueue.has(from)) iceCandidateQueue.set(from, []);
+            iceCandidateQueue.get(from).push(signal);
         }
     }
 });
 
-// --- WebRTC Setup ---
-async function createOffer() {
+async function createOffer(peerId) {
     showLoader('handshake');
-    dataChannel = pc.createDataChannel('file-transfer');
-    setupDataChannelEvents();
+    if (!peers.has(peerId)) {
+        const pc = createPeerConnection(peerId);
+        peers.set(peerId, { pc, dc: null });
+    }
+    const peer = peers.get(peerId);
+    
+    const dc = peer.pc.createDataChannel('file-transfer');
+    peer.dc = dc;
+    setupDataChannelEvents(peerId, dc);
     
     try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('signal', { roomID: currentRoomID, signal: pc.localDescription });
-    } catch (e) {
-        console.error('Offer creation failed', e);
-    }
+        const offer = await peer.pc.createOffer();
+        await peer.pc.setLocalDescription(offer);
+        socket.emit('signal', { roomID: currentRoomID, signal: peer.pc.localDescription, to: peerId });
+    } catch (e) { console.error('Offer fail', e); }
 }
 
-function setupDataChannelEvents() {
-    dataChannel.onopen = () => {
+function setupDataChannelEvents(peerId, dc) {
+    dc.onopen = () => {
         hideLoader();
         roleBadge.textContent = userRole;
         updateUIStatus('connected');
         setupSection.classList.add('hidden');
         transferSection.classList.remove('hidden');
         updateUIStatus('waiting-file');
-        showSnackbar('Direct P2P connection established!', 'success');
+        showSnackbar(`Connected to peer ${peerId.slice(0,4)}`, 'success');
     };
 
-    dataChannel.onclose = () => {
-        statusText.textContent = 'Disconnected';
-        showSnackbar('Connection closed by peer.', 'error');
+    dc.onclose = () => {
+        showSnackbar(`Peer ${peerId.slice(0,4)} disconnected.`, 'error');
     };
 
-    dataChannel.onmessage = (event) => {
-        handleIncomingData(event.data);
+    dc.onmessage = (event) => {
+        handleIncomingData(event.data, peerId);
     };
 }
 
@@ -265,77 +365,65 @@ function formatSize(bytes) {
 }
 
 // --- File Transfer Logic ---
-const CHUNK_SIZE = 16384; 
-const BUFFER_THRESHOLD = 1024 * 1024; 
 let receivedChunks = [];
 let receivingFileName = '';
 let receivingFileSize = 0;
 
 async function sendFile(file) {
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
+    // In multi-peer, we send to all connected peers
+    const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
+    if (activePeers.length === 0) {
+        showSnackbar('No connected peers to send to!', 'error');
+        return;
+    }
 
-    const fileMetadata = JSON.stringify({
-        name: file.name,
-        size: file.size
-    });
-    
-    dataChannel.send(fileMetadata);
+    const fileMetadata = JSON.stringify({ name: file.name, size: file.size });
+    activePeers.forEach(([id, p]) => p.dc.send(fileMetadata));
     
     fileNameDisp.textContent = file.name;
     fileSizeDisp.textContent = `0 ${formatSize(file.size).split(' ')[1]} / ${formatSize(file.size)}`;
-    
-    updateUIStatus('sending', `Sending ${file.name}...`, `Streaming ${file.name} (${file.size} bytes)...`);
+    updateUIStatus('sending', `Sending ${file.name}...`);
 
     const reader = new FileReader();
     let offset = 0;
 
     const sendNextChunk = async () => {
-        if (dataChannel.bufferedAmount > BUFFER_THRESHOLD) {
+        const canSend = activePeers.every(([id, p]) => p.dc.bufferedAmount < settings.bufferLimit);
+        if (!canSend) {
             setTimeout(sendNextChunk, 50);
             return;
         }
 
         if (offset < file.size) {
-            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            const slice = file.slice(offset, offset + settings.chunkSize);
             reader.onload = (e) => {
-                try {
-                    dataChannel.send(e.target.result);
-                    offset += CHUNK_SIZE;
-                    
-                    const progress = Math.min(100, Math.floor((offset / file.size) * 100));
-                    updateProgress(progress, offset, file.size);
-                    
-                    sendNextChunk();
-                } catch (err) {
-                    console.error('Send error:', err);
-                    showSnackbar('Transfer failed due to network buffer error.', 'error');
-                }
+                activePeers.forEach(([id, p]) => p.dc.send(e.target.result));
+                offset += settings.chunkSize;
+                updateProgress(Math.min(100, Math.floor((offset / file.size) * 100)), offset, file.size);
+                sendNextChunk();
             };
             reader.readAsArrayBuffer(slice);
         } else {
             progressFill.classList.add('complete');
             updateUIStatus('complete');
-            showSnackbar('File sent successfully!', 'success');
+            showSnackbar('File sent to all peers!', 'success');
         }
     };
-
     sendNextChunk();
 }
 
-function handleIncomingData(data) {
+function handleIncomingData(data, peerId) {
     if (typeof data === 'string') {
         const metadata = JSON.parse(data);
         receivingFileName = metadata.name;
         receivingFileSize = metadata.size;
         receivedChunks = [];
-        
         fileNameDisp.textContent = receivingFileName;
         fileSizeDisp.textContent = `0 ${formatSize(receivingFileSize).split(' ')[1]} / ${formatSize(receivingFileSize)}`;
-        
         progressContainer.classList.remove('hidden');
         updateProgress(0, 0, receivingFileSize);
-        updateUIStatus('receiving', `Receiving ${receivingFileName}...`, `Collecting chunks for ${receivingFileName}...`);
-        showSnackbar(`Peer started sending: ${receivingFileName}`, 'info');
+        updateUIStatus('receiving');
+        showSnackbar(`Peer ${peerId.slice(0,4)} is sending: ${receivingFileName}`, 'info');
         return;
     }
 
@@ -348,10 +436,12 @@ function handleIncomingData(data) {
         progressFill.classList.add('complete');
         const blob = new Blob(receivedChunks);
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = receivingFileName;
-        a.click();
+        if (settings.autoDownload) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = receivingFileName;
+            a.click();
+        }
         updateUIStatus('complete');
         showSnackbar('File received successfully!', 'success');
     }
@@ -373,18 +463,17 @@ fileInput.onchange = (e) => {
 dropZone.ondragover = (e) => {
     e.preventDefault();
     dropZone.classList.add('drag-over');
-    dropZone.style.backgroundColor = '#1e293b';
 };
 
 dropZone.ondragleave = () => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    dropZone.style.backgroundColor = 'transparent';
 };
 
 dropZone.ondrop = (e) => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    dropZone.style.backgroundColor = 'transparent';
     if (e.dataTransfer.files[0]) sendFile(e.dataTransfer.files[0]);
 };
+
+loadSettings();

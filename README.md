@@ -16,9 +16,10 @@ Aether is a browser-based P2P tool that allows users to send large files directl
 
 - **🚀 Direct P2P Transfer**: Files are streamed directly from Peer A to Peer B using WebRTC Data Channels.
 - **🔒 Privacy First**: Since files aren't uploaded to a server, your data remains private and secure.
-- **📦 Large File Support**: Intelligent file chunking (16KB slices) allows the transfer of massive files without crashing the browser.
+- **📦 Large File Support**: Intelligent file chunking and dynamic buffer management prevent browser crashes.
+- **🔑 Private Rooms**: Host your own rooms with optional passwords and custom peer limits.
 - **📱 Fully Responsive**: A sleek, modern UI that works seamlessly on desktops, tablets, and smartphones.
-- **🛠️ Verbose Mode**: A toggle for power users to see the technical WebRTC handshake and signaling process in real-time.
+- **🛠️ Advanced Settings**: Custom accent colors, Verbose mode for technical logs, and adjustable networking tweaks (Chunk size, Buffer limits).
 - **⚡ Instant Connection**: Unique room codes for quick pairing via a lightweight Socket.io signaling server.
 
 ---

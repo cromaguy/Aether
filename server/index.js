@@ -6,43 +6,93 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-  },
+  cors: { origin: '*' },
 });
 
 app.use(express.static(path.join(__dirname, '../client')));
 
+// We only use this Map to store the password/peer limits. 
+// We still rely on Socket.io's adapter to check if the room physically exists.
+const roomMetadata = new Map();
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
-  socket.on('create-room', () => {
+  socket.on('create-room', (data) => {
+    const maxPeers = data?.maxPeers ? parseInt(data.maxPeers) : 2;
+    const password = data?.password || null;
+    
     const roomID = Math.floor(1000 + Math.random() * 9000).toString();
     socket.join(roomID);
+    
+    roomMetadata.set(roomID, { password, maxPeers });
+    
     socket.emit('room-created', roomID);
-    console.log(`Room created: ${roomID} by ${socket.id}`);
+    console.log(`Room created: ${roomID} by ${socket.id}. Max: ${maxPeers}`);
   });
 
-  socket.on('join-room', (roomID) => {
-    const room = io.sockets.adapter.rooms.get(roomID);
+  socket.on('check-room', (roomID) => {
+    const id = roomID?.trim();
+    const room = io.sockets.adapter.rooms.get(id);
+    const meta = roomMetadata.get(id);
+    
+    // Room exists only if someone is physically in it
     if (room && room.size > 0) {
-      socket.join(roomID);
-      socket.to(roomID).emit('peer-joined', socket.id);
-      console.log(`User ${socket.id} joined room: ${roomID}`);
+      socket.emit('room-info', { 
+        exists: true, 
+        hasPassword: !!meta?.password,
+        maxPeers: meta?.maxPeers || 2 
+      });
     } else {
-      socket.emit('error', 'Room not found');
+      socket.emit('room-info', { exists: false });
     }
   });
 
-  socket.on('signal', ({ roomID, signal }) => {
-    socket.to(roomID).emit('signal', {
-      signal,
-      from: socket.id,
-    });
+  socket.on('join-room', (data) => {
+    const roomID = typeof data === 'object' ? data.roomID : data;
+    const password = typeof data === 'object' ? data.password : null;
+
+    // 1. Bulletproof check: Is there a socket actively in this room?
+    const room = io.sockets.adapter.rooms.get(roomID);
+    
+    if (room && room.size > 0) {
+      // 2. Check metadata limits
+      const meta = roomMetadata.get(roomID);
+      
+      if (meta?.password && meta.password !== password) {
+        return socket.emit('error', 'Incorrect password.');
+      }
+      if (meta?.maxPeers && room.size >= meta.maxPeers) {
+        return socket.emit('error', 'This room is full.');
+      }
+
+      socket.join(roomID);
+      socket.to(roomID).emit('peer-joined', { peerId: socket.id, roomID });
+      socket.emit('joined-successfully', roomID);
+      console.log(`User ${socket.id} joined room: ${roomID}`);
+    } else {
+      socket.emit('error', 'Room not found or host disconnected.');
+    }
+  });
+
+  socket.on('signal', ({ roomID, signal, to }) => {
+    // Supports both direct messaging (new) and broadcasting (old)
+    if (to) {
+      io.to(to).emit('signal', { signal, from: socket.id, roomID });
+    } else {
+      socket.to(roomID).emit('signal', { signal, from: socket.id, roomID });
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    
+    // Auto-cleanup: remove metadata if the room is empty
+    roomMetadata.forEach((value, key) => {
+      if (!io.sockets.adapter.rooms.has(key)) {
+        roomMetadata.delete(key);
+      }
+    });
   });
 });
 
