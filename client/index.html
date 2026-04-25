@@ -11,105 +11,141 @@
     
     <div id="settings-modal" class="hidden">
         <div class="modal-content">
-            <h2>Settings</h2>
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button id="close-settings-x" class="close-x">&times;</button>
+            </div>
             
+            <div class="settings-body">
                 <div class="settings-group">
-                    <h3>General</h3>
-                    <div class="setting-item">
-                        <span>Username (Optional)</span>
-                        <input type="text" id="username-input" placeholder="Anonymous" style="margin-right: 0; width: 120px;">
+                    <div class="group-header">
+                        <span class="group-icon">👤</span>
+                        <h3>General</h3>
                     </div>
                     <div class="setting-item">
-                        <span>Verbose Mode</span>
+                        <div class="setting-info">
+                            <span class="setting-label">Username</span>
+                            <span class="setting-desc">How you appear to others</span>
+                        </div>
+                        <input type="text" id="username-input" placeholder="Anonymous" class="settings-input">
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Verbose Mode</span>
+                            <span class="setting-desc">Show technical logs</span>
+                        </div>
                         <label class="switch">
-
-                        <input type="checkbox" id="verbose-toggle">
-                        <span class="slider round"></span>
-                    </label>
+                            <input type="checkbox" id="verbose-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Accent Color</span>
+                            <span class="setting-desc">Personalize the interface</span>
+                        </div>
+                        <div class="color-picker">
+                            <div class="color-option active" style="background: #38bdf8;" data-color="#38bdf8"></div>
+                            <div class="color-option" style="background: #a855f7;" data-color="#a855f7"></div>
+                            <div class="color-option" style="background: #22c55e;" data-color="#22c55e"></div>
+                            <div class="color-option" style="background: #f97316;" data-color="#f97316"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="setting-item">
-                    <span>Accent Color</span>
-                    <div class="color-picker">
-                        <div class="color-option active" style="background: #38bdf8;" data-color="#38bdf8"></div>
-                        <div class="color-option" style="background: #a855f7;" data-color="#a855f7"></div>
-                        <div class="color-option" style="background: #22c55e;" data-color="#22c55e"></div>
-                        <div class="color-option" style="background: #f97316;" data-color="#f97316"></div>
+
+                <div class="settings-group">
+                    <div class="group-header">
+                        <span class="group-icon">⚡</span>
+                        <h3>Network & Transfer</h3>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Chunk Size</span>
+                            <span class="setting-desc">Data packet size</span>
+                        </div>
+                        <select id="chunk-size-select" class="settings-select">
+                            <option value="16384">16 KB (Stable)</option>
+                            <option value="65536">64 KB (Balanced)</option>
+                            <option value="262144">256 KB (Fast)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Buffer Limit</span>
+                            <span class="setting-desc">Max pending data</span>
+                        </div>
+                        <select id="buffer-limit-select" class="settings-select">
+                            <option value="1048576">1 MB (Safe)</option>
+                            <option value="5242880">5 MB (Normal)</option>
+                            <option value="16777216">16 MB (Aggressive)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Auto-Download</span>
+                            <span class="setting-desc">Save files automatically</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="auto-download-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="host-settings" class="settings-group hidden">
+                    <div class="group-header">
+                        <span class="group-icon">🛠️</span>
+                        <h3>Room Control</h3>
+                    </div>
+                    <div class="setting-item">
+                        <button id="disconnect-peer-btn" class="btn-danger">Disconnect All Peers</button>
                     </div>
                 </div>
             </div>
-
-            <div class="settings-group">
-                <h3>Network & Transfer</h3>
-                <div class="setting-item">
-                    <span>Chunk Size</span>
-                    <select id="chunk-size-select">
-                        <option value="16384">16 KB (Stable)</option>
-                        <option value="65536">64 KB (Balanced)</option>
-                        <option value="262144">256 KB (Fast)</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <span>Buffer Limit</span>
-                    <select id="buffer-limit-select">
-                        <option value="1048576">1 MB (Safe)</option>
-                        <option value="5242880">5 MB (Normal)</option>
-                        <option value="16777216">16 MB (Aggressive)</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <span>Auto-Download</span>
-                    <label class="switch">
-                        <input type="checkbox" id="auto-download-toggle">
-                        <span class="slider round"></span>
-                    </label>
-                </div>
+            <div class="modal-footer">
+                <button id="close-settings" class="btn-secondary">Save & Close</button>
             </div>
-
-            <div id="host-settings" class="settings-group hidden">
-                <h3>Room Control (Host)</h3>
-                <div class="setting-item">
-                    <button id="disconnect-peer-btn" class="btn-danger">Disconnect Peer</button>
-                </div>
-            </div>
-
-            <button id="close-settings">Close</button>
         </div>
     </div>
 
     <div id="snackbar-container"></div>
 
     <div class="container">
-        <h1>Aether P2P</h1>
+        <header class="app-header">
+            <h1>Aether P2P</h1>
+        </header>
         
         <div id="setup-section">
-            <div class="card">
-                <h2>Create a Room</h2>
-                <div class="setup-inputs">
-                    <div class="input-group">
-                        <label>Max Peers</label>
-                        <input type="number" id="create-max-peers" value="2" min="2" max="10">
+            <div class="setup-grid">
+                <div class="card">
+                    <h2>Create a Room</h2>
+                    <div class="setup-inputs">
+                        <div class="input-group">
+                            <label>Max Peers</label>
+                            <input type="number" id="create-max-peers" value="2" min="2" max="10">
+                        </div>
+                        <div class="input-group">
+                            <label>Password (Optional)</label>
+                            <input type="password" id="create-password" placeholder="Set password">
+                        </div>
                     </div>
-                    <div class="input-group">
-                        <label>Password (Optional)</label>
-                        <input type="password" id="create-password" placeholder="Set password">
-                    </div>
+                    <button id="create-room-btn">Create Room</button>
+                    <p id="room-display" class="hidden">Your Room Code: <span id="room-id"></span></p>
                 </div>
-                <button id="create-room-btn">Create Room</button>
-                <p id="room-display" class="hidden">Your Room Code: <span id="room-id"></span></p>
-            </div>
-            <div class="card">
-                <h2>Join a Room</h2>
-                <div class="setup-inputs">
-                    <div class="input-group">
-                        <label>Room Code</label>
-                        <input type="text" id="join-room-input" placeholder="Enter Code">
+                <div class="card">
+                    <h2>Join a Room</h2>
+                    <div class="setup-inputs">
+                        <div class="input-group">
+                            <label>Room Code</label>
+                            <input type="text" id="join-room-input" placeholder="Enter Code">
+                        </div>
+                        <div id="join-password-group" class="input-group hidden">
+                            <label>Password</label>
+                            <input type="password" id="join-password" placeholder="Enter Password">
+                        </div>
                     </div>
-                    <div id="join-password-group" class="input-group hidden">
-                        <label>Password</label>
-                        <input type="password" id="join-password" placeholder="Enter Password">
-                    </div>
+                    <button id="join-room-btn">Join Room</button>
                 </div>
-                <button id="join-room-btn">Join Room</button>
             </div>
         </div>
 
@@ -119,35 +155,53 @@
         </div>
 
         <div id="transfer-section" class="hidden">
-            <div class="status-bar">
-                <span id="connection-dot" class="dot"></span>
-                <span id="role-badge" class="badge">Connecting...</span>
-                Status: <span id="status">Connecting...</span>
-            </div>
-            <div id="peers-list" class="peers-list"></div>
-            <div class="drop-zone" id="drop-zone">
-                <div class="drop-zone-content">
-                    <div class="upload-icon">📁</div>
-                    <p id="drop-zone-text">Drag & Drop file here or <span>browse</span></p>
-                </div>
-                <input type="file" id="file-input" hidden>
-            </div>
-            <div id="progress-container" class="hidden">
-                <div class="file-info">
-                    <span id="file-name">Filename.ext</span>
-                    <span id="file-size">0 MB / 0 MB</span>
-                </div>
-                <div class="progress-bar">
-                    <div id="progress-fill"></div>
-                </div>
-                <p id="progress-text">0%</p>
-            </div>
-            <div id="chat-container" class="hidden">
-                <div id="chat-messages"></div>
-                <div class="chat-input-group">
-                    <input type="text" id="chat-input" placeholder="Type a message...">
-                    <button id="chat-send">Send</button>
-                </div>
+            <div class="transfer-grid">
+                <aside class="transfer-sidebar">
+                    <div class="card status-card">
+                        <div class="status-bar">
+                            <span id="connection-dot" class="dot"></span>
+                            <span id="role-badge" class="badge">Connecting...</span>
+                        </div>
+                        <div id="status" class="status-text">Connecting...</div>
+                    </div>
+                    
+                    <div class="card peers-card">
+                        <h3>Connected Peers</h3>
+                        <div id="peers-list" class="peers-list"></div>
+                    </div>
+
+                    <div id="chat-container" class="card chat-card hidden">
+                        <h3>Chat</h3>
+                        <div id="chat-messages"></div>
+                        <div class="chat-input-group">
+                            <input type="text" id="chat-input" placeholder="Type a message...">
+                            <button id="chat-send">Send</button>
+                        </div>
+                    </div>
+                </aside>
+
+                <main class="transfer-main">
+                    <div class="card upload-card">
+                        <div class="drop-zone" id="drop-zone">
+                            <div class="drop-zone-content">
+                                <div class="upload-icon">📁</div>
+                                <p id="drop-zone-text">Drag & Drop file here or <span>browse</span></p>
+                            </div>
+                            <input type="file" id="file-input" hidden>
+                        </div>
+                    </div>
+
+                    <div id="progress-container" class="card progress-card hidden">
+                        <div class="file-info">
+                            <span id="file-name">Filename.ext</span>
+                            <span id="file-size">0 MB / 0 MB</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="progress-fill"></div>
+                        </div>
+                        <p id="progress-text">0%</p>
+                    </div>
+                </main>
             </div>
         </div>
     </div>

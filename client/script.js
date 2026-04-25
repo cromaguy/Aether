@@ -58,6 +58,7 @@ const chatSend = document.getElementById('chat-send');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettings = document.getElementById('close-settings');
+const closeSettingsX = document.getElementById('close-settings-x');
 const verboseToggle = document.getElementById('verbose-toggle');
 const chunkSizeSelect = document.getElementById('chunk-size-select');
 const bufferLimitSelect = document.getElementById('buffer-limit-select');
@@ -135,6 +136,7 @@ function hideLoader() {
 // --- Settings Logic ---
 settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
 closeSettings.onclick = () => settingsModal.classList.add('hidden');
+closeSettingsX.onclick = () => settingsModal.classList.add('hidden');
 
 verboseToggle.onchange = (e) => {
     settings.verbose = e.target.checked;
