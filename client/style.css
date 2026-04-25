@@ -1,5 +1,4 @@
 :root {
-    /* Theme-Independent Variables */
     --accent-color: #38bdf8;
     --accent-hover: #7dd3fc;
     --accent-glow: rgba(56, 189, 248, 0.3);
@@ -8,7 +7,6 @@
     --transition-speed: 0.2s;
 }
 
-/* Light Theme (Default/System) */
 :root {
     --bg-color: #f8fafc;
     --bg-dark: #f1f5f9;
@@ -22,7 +20,6 @@
     --hover-bg: rgba(56, 189, 248, 0.1);
 }
 
-/* Dark Theme (System Preference) */
 @media (prefers-color-scheme: dark) {
     :root {
         --bg-color: #0f172a;
@@ -84,7 +81,6 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
-/* Setup Section */
 #setup-section {
     display: flex;
     justify-content: center;
@@ -121,7 +117,6 @@ h1 {
     font-weight: 600;
 }
 
-/* Transfer Section Layout */
 .transfer-grid {
     display: grid;
     grid-template-columns: 380px 1fr;
@@ -141,7 +136,6 @@ h1 {
     gap: 1.5rem;
 }
 
-/* Status Card */
 .status-card {
     text-align: center;
 }
@@ -160,7 +154,6 @@ h1 {
     font-weight: 500;
 }
 
-/* Peers Card */
 .peers-card h3 {
     font-size: 1rem;
     color: var(--text-muted);
@@ -196,7 +189,6 @@ h1 {
     box-shadow: 0 0 8px var(--success);
 }
 
-/* Chat Card */
 .chat-card {
     display: flex;
     flex-direction: column;
@@ -226,6 +218,7 @@ h1 {
     max-width: 80%;
     line-height: 1.4;
     animation: messageAppear 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    position: relative;
 }
 
 .chat-msg.sent {
@@ -242,6 +235,42 @@ h1 {
     color: var(--text-color);
     border-bottom-left-radius: 4px;
     animation-name: messageAppearReceived;
+}
+
+.chat-msg code {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.chat-msg.system {
+    align-self: center;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-align: center;
+    max-width: 100%;
+    animation: fadeIn 0.5s ease;
+    font-style: italic;
+}
+
+.chat-msg .sender {
+    font-size: 0.7rem;
+    font-weight: 700;
+    opacity: 0.8;
+    display: block;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.chat-msg .timestamp {
+    font-size: 0.65rem;
+    opacity: 0.6;
+    display: block;
+    text-align: right;
+    margin-top: 4px;
 }
 
 @keyframes messageAppearSent {
@@ -323,6 +352,79 @@ h1 {
     text-transform: uppercase;
 }
 
+.chat-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 8px;
+    overflow-x: auto;
+}
+
+.markup-toolbar {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.markup-btn {
+    background: var(--bg-dark);
+    color: var(--text-color);
+    border: 1px solid var(--card-border);
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: none;
+    width: auto;
+    transition: all 0.2s;
+}
+
+.markup-btn:hover {
+    background: var(--hover-bg);
+    transform: none;
+    box-shadow: none;
+}
+
+.suggestions-toolbar {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none; /* Firefox */
+}
+
+.suggestions-toolbar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+.suggestion-btn {
+    background: var(--bg-dark);
+    color: var(--text-muted);
+    border: 1px solid var(--card-border);
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: none;
+    transition: all 0.2s;
+}
+
+.suggestion-btn:hover {
+    background: var(--hover-bg);
+    color: var(--text-color);
+    transform: none;
+    box-shadow: none;
+}
+
 .chat-input-group {
     display: flex;
     gap: 10px;
@@ -331,7 +433,6 @@ h1 {
     border-radius: 1rem;
 }
 
-/* Upload & Progress */
 .upload-card {
     padding: 0;
 }
@@ -403,7 +504,6 @@ h1 {
     text-align: right;
 }
 
-/* Form Elements */
 button {
     background-color: var(--accent-color);
     color: #0f172a;
@@ -457,7 +557,6 @@ input:focus, select:focus {
     font-weight: 500;
 }
 
-/* Settings Modal */
 #settings-btn {
     position: fixed;
     top: 30px;
@@ -629,7 +728,6 @@ input:focus, select:focus {
     box-shadow: 0 0 0 2px var(--text-color);
 }
 
-/* Toggle Switch */
 .switch {
     position: relative;
     display: inline-block;
@@ -663,7 +761,6 @@ input:focus, select:focus {
 input:checked + .slider { background-color: var(--accent-color); }
 input:checked + .slider:before { transform: translateX(24px); }
 
-/* Utilities */
 .hidden { display: none !important; }
 
 #snackbar-container {
@@ -716,7 +813,6 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* Responsiveness */
 @media (max-width: 900px) {
     .transfer-grid { grid-template-columns: 1fr; }
     .transfer-sidebar { order: 2; }
@@ -732,4 +828,40 @@ input:checked + .slider:before { transform: translateX(24px); }
     .setup-grid { grid-template-columns: 1fr; }
     .card { padding: 1.2rem; }
     .modal-content { width: 92vw; }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 10px;
+    transition: background var(--transition-speed);
+}
+
+body:hover ::-webkit-scrollbar-thumb,
+.modal-content:hover ::-webkit-scrollbar-thumb,
+#chat-messages:hover ::-webkit-scrollbar-thumb {
+    background: var(--text-dim);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-color) !important;
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+body:hover, .modal-content:hover, #chat-messages:hover {
+    scrollbar-color: var(--text-dim) transparent;
 }

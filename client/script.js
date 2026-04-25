@@ -1,7 +1,5 @@
-// Check if we are running locally
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-// Connect locally if on localhost, otherwise connect to the live Render server
 const socket = isLocal ? io() : io('https://aether-jvts.onrender.com');const configuration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -13,17 +11,15 @@ const socket = isLocal ? io() : io('https://aether-jvts.onrender.com');const con
     ]
 };
 
-// MULTI-PEER STATE
-const peers = new Map(); // peerId -> { pc, dc }
+const peers = new Map();
 let currentRoomID = null;
 let isVerbose = false;
 let userRole = '';
-let iceCandidateQueue = new Map(); // peerId -> [candidates]
+let iceCandidateQueue = new Map();
 let handshakeTimer = null;
 let typingTimer = null;
-const remoteTypingTimers = new Map(); // peerId -> timer
+const remoteTypingTimers = new Map();
 
-// Dynamic Settings
 let settings = {
     username: '',
     accentColor: '#38bdf8',
@@ -56,7 +52,6 @@ const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 
-// Settings Elements
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettings = document.getElementById('close-settings');
@@ -70,15 +65,20 @@ const hostSettings = document.getElementById('host-settings');
 const disconnectPeerBtn = document.getElementById('disconnect-peer-btn');
 
 const STATUS_MAP = {
-    'creating-room': { layman: 'Creating your secure room...', tech: 'Emitting create-room event to signaling server...' },
-    'joining-room': { layman: 'Connecting to room...', tech: 'Joining room and waiting for peer signal...' },
-    'handshake': { layman: 'Establishing direct connection...', tech: 'Performing WebRTC SDP handshake & ICE gathering...' },
-    'connected': { layman: 'Connected! Ready to transfer.', tech: 'RTCPeerConnection state: connected. DataChannel open.' },
-    'waiting-file': { layman: 'Waiting for files...', tech: 'DataChannel idle. Listening for binary stream...' },
-    'sending': { layman: 'Sending file...', tech: 'Slicing file into binary chunks and streaming...' },
-    'receiving': { layman: 'Receiving file...', tech: 'Collecting binary chunks into Blob array...' },
-    'complete': { layman: 'Transfer complete!', tech: 'All chunks received. Blob reassembled and triggered.' }
+    'creating-room': { layman: 'Initializing secure space...', tech: 'Emitting create-room event to signaling server...' },
+    'joining-room': { layman: 'Entering the room...', tech: 'Joining room and waiting for peer signal...' },
+    'handshake': { layman: 'Establishing P2P tunnel...', tech: 'Performing WebRTC SDP handshake & ICE gathering...' },
+    'connected': { layman: 'Securely connected.', tech: 'RTCPeerConnection state: connected. DataChannel open.' },
+    'waiting-file': { layman: 'Awaiting transfer...', tech: 'DataChannel idle. Listening for binary stream...' },
+    'sending': { layman: 'Streaming data...', tech: 'Slicing file into binary chunks and streaming...' },
+    'receiving': { layman: 'Incoming data...', tech: 'Collecting binary chunks into Blob array...' },
+    'complete': { layman: 'Transfer successful!', tech: 'All chunks received. Blob reassembled and triggered.' }
 };
+
+function getPeerName(peerId) {
+    const peer = peers.get(peerId);
+    return peer?.username || `Peer ${peerId.slice(0, 4)}`;
+}
 
 function showSnackbar(message, type = 'info') {
     const container = document.getElementById('snackbar-container');
@@ -92,7 +92,25 @@ function showSnackbar(message, type = 'info') {
 function appendChatMessage(text, sender, type) {
     const msg = document.createElement('div');
     msg.className = `chat-msg ${type}`;
-    msg.innerHTML = `<span class="sender">${sender}</span>${text}`;
+    
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    let formattedText = text
+        .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
+        .replace(/~~(.*?)~~/g, '<del>$1</del>')
+        .replace(/`(.*?)`/g, '<code>$1</code>');
+
+    if (type === 'system') {
+        msg.innerHTML = `<span>${formattedText}</span>`;
+    } else {
+        msg.innerHTML = `
+            <span class="sender">${sender}</span>
+            <span class="text">${formattedText}</span>
+            <span class="timestamp">${timestamp}</span>
+        `;
+    }
+    
     chatMessages.appendChild(msg);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -130,7 +148,7 @@ function updatePeersList() {
     peers.forEach((peer, id) => {
         const item = document.createElement('div');
         item.className = 'peer-item';
-        const name = peer.username || `Peer ${id.slice(0, 4)}`;
+        const name = getPeerName(id);
         item.textContent = name;
         peersList.appendChild(item);
     });
@@ -163,7 +181,6 @@ function hideLoader() {
     if (handshakeTimer) clearTimeout(handshakeTimer);
 }
 
-// --- Settings Logic ---
 settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
 closeSettings.onclick = () => settingsModal.classList.add('hidden');
 closeSettingsX.onclick = () => settingsModal.classList.add('hidden');
@@ -244,7 +261,6 @@ function loadSettings() {
     }
 }
 
-// --- Peer Connection Logic ---
 function createPeerConnection(peerId) {
     const pc = new RTCPeerConnection(configuration);
     
@@ -252,7 +268,6 @@ function createPeerConnection(peerId) {
         if (event.candidate) {
             socket.emit('signal', { roomID: currentRoomID, signal: event.candidate, to: peerId });
         } else {
-            // Signal ICE gathering completion
             socket.emit('signal', { roomID: currentRoomID, signal: { candidate: null }, to: peerId });
         }
     };
@@ -261,7 +276,6 @@ function createPeerConnection(peerId) {
         const state = pc.connectionState;
         if (state === 'connected') {
             connectionDot.className = 'dot connected';
-            // BRIDGE TO WINUI
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
                     type: 'CONNECTION_STATE',
@@ -270,7 +284,6 @@ function createPeerConnection(peerId) {
             }
         } else if (state === 'failed') {
             connectionDot.className = 'dot disconnected';
-            // BRIDGE TO WINUI
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
                     type: 'CONNECTION_STATE',
@@ -283,7 +296,6 @@ function createPeerConnection(peerId) {
     pc.ondatachannel = (event) => {
         const dc = event.channel;
         setupDataChannelEvents(peerId, dc);
-        // BRIDGE TO WINUI: Tell WinUI we have a data channel
         if (window.chrome && window.chrome.webview) {
             window.chrome.webview.postMessage({
                 type: 'CONNECTION_STATE',
@@ -309,7 +321,6 @@ async function processIceQueue(peerId) {
     iceCandidateQueue.set(peerId, queue);
 }
 
-// --- Room Management ---
 document.getElementById('create-room-btn').onclick = () => {
     const maxPeers = document.getElementById('create-max-peers').value;
     const password = document.getElementById('create-password').value;
@@ -356,7 +367,8 @@ socket.on('room-created', (roomID) => {
     hostSettings.classList.remove('hidden');
     
     // Display Room ID in the status badge so it can still be shared
-    roleBadge.textContent = `Host (Room: ${roomID})`;
+    const hostName = settings.username || 'Host';
+    roleBadge.textContent = `${hostName}'s Room (ID: ${roomID})`;
     updateUIStatus('waiting-file', 'Waiting for peers to join...', 'Listening for peer connections...');
     
     showSnackbar(`Room created successfully! Code: ${roomID}`, 'success');
@@ -373,9 +385,11 @@ socket.on('error', (msg) => {
 
 socket.on('peer-joined', ({ peerId, roomID }) => {
     console.log(`Peer ${peerId} joined. Initiating offer...`);
-    showSnackbar(`Peer ${peerId.slice(0,4)} joined!`, 'success');
+    showSnackbar(`${getPeerName(peerId)} joined!`, 'success');
+    appendChatMessage(`${getPeerName(peerId)} joined the room`, 'System', 'system');
     createOffer(peerId); 
 });
+
 
 socket.on('joined-successfully', (roomID) => {
     userRole = 'Guest/Receiver';
@@ -436,28 +450,32 @@ async function createOffer(peerId) {
 function setupDataChannelEvents(peerId, dc) {
     const peer = peers.get(peerId);
     if (peer) peer.dc = dc;
+    
+        dc.onopen = () => {
+            const username = settings.username || 'Anonymous';
+            dc.send(`USER_INFO:${username}`);
 
-    dc.onopen = () => {
-        // Send username to peer
-        const username = settings.username || 'Anonymous';
-        dc.send(`USER_INFO:${username}`);
+    
+            hideLoader();
+            roleBadge.textContent = userRole;
+            updateUIStatus('connected');
+            setupSection.classList.add('hidden');
+            transferSection.classList.remove('hidden');
+            updateUIStatus('waiting-file');
+            showSnackbar(`Connected to ${getPeerName(peerId)}`, 'success');
+            updatePeersList();
+            chatContainer.classList.remove('hidden');
+        };
 
-        hideLoader();
-        roleBadge.textContent = userRole;
-        updateUIStatus('connected');
-        setupSection.classList.add('hidden');
-        transferSection.classList.remove('hidden');
-        updateUIStatus('waiting-file');
-        showSnackbar(`Connected to peer ${peerId.slice(0,4)}`, 'success');
-        updatePeersList();
-        chatContainer.classList.remove('hidden');
-    };
 
     dc.onclose = () => {
-        showSnackbar(`Peer ${peerId.slice(0,4)} disconnected.`, 'error');
+        const name = getPeerName(peerId);
+        showSnackbar(`${name} disconnected.`, 'error');
+        appendChatMessage(`${name} left the room`, 'System', 'system');
         peers.delete(peerId);
         updatePeersList();
     };
+
 
     dc.onmessage = (event) => {
         handleIncomingData(event.data, peerId);
@@ -486,13 +504,12 @@ function formatSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// --- File Transfer Logic ---
+// File Transfer Logic
 let receivedChunks = [];
 let receivingFileName = '';
 let receivingFileSize = 0;
 
 async function sendFile(file) {
-    // In multi-peer, we send to all connected peers
     const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
     if (activePeers.length === 0) {
         showSnackbar('No connected peers to send to!', 'error');
@@ -501,6 +518,8 @@ async function sendFile(file) {
 
     const fileMetadata = JSON.stringify({ name: file.name, size: file.size });
     activePeers.forEach(([id, p]) => p.dc.send(fileMetadata));
+    
+    appendChatMessage(`🚀 Started sending *${file.name}*`, 'System', 'system');
     
     fileNameDisp.textContent = file.name;
     fileSizeDisp.textContent = `0 ${formatSize(file.size).split(' ')[1]} / ${formatSize(file.size)}`;
@@ -529,6 +548,7 @@ async function sendFile(file) {
             progressFill.classList.add('complete');
             updateUIStatus('complete');
             showSnackbar('File sent to all peers!', 'success');
+            appendChatMessage(`✅ *${file.name}* sent successfully!`, 'System', 'system');
         }
     };
     sendNextChunk();
@@ -537,28 +557,27 @@ async function sendFile(file) {
 function handleIncomingData(data, peerId) {
     console.log(`Received data from peer ${peerId}, type: ${typeof data}, length: ${data.byteLength || data.length}`);
     
-    if (typeof data === 'string') {
-        if (data.startsWith('CHAT:')) {
-            const msg = data.substring(5);
-            const peer = peers.get(peerId);
-            const name = peer?.username || `Peer ${peerId.slice(0,4)}`;
-            appendChatMessage(msg, name, 'received');
-            hideTypingIndicator();
-            return;
-        }
-        if (data.startsWith('TYPING:')) {
-            const peer = peers.get(peerId);
-            const name = peer?.username || `Peer ${peerId.slice(0,4)}`;
-            showTypingIndicator(name);
-            if (remoteTypingTimers.has(peerId)) clearTimeout(remoteTypingTimers.get(peerId));
-            const timer = setTimeout(() => {
+        if (typeof data === 'string') {
+            if (data.startsWith('CHAT:')) {
+                const msg = data.substring(5);
+                const name = getPeerName(peerId);
+                appendChatMessage(msg, name, 'received');
                 hideTypingIndicator();
-                remoteTypingTimers.delete(peerId);
-            }, 3000);
-            remoteTypingTimers.set(peerId, timer);
-            return;
-        }
-        if (data.startsWith('USER_INFO:')) {
+                return;
+            }
+            if (data.startsWith('TYPING:')) {
+                const name = getPeerName(peerId);
+                showTypingIndicator(name);
+                if (remoteTypingTimers.has(peerId)) clearTimeout(remoteTypingTimers.get(peerId));
+                const timer = setTimeout(() => {
+                    hideTypingIndicator();
+                    remoteTypingTimers.delete(peerId);
+                }, 3000);
+                remoteTypingTimers.set(peerId, timer);
+                return;
+            }
+            if (data.startsWith('USER_INFO:')) {
+
             const username = data.substring(10);
             const peer = peers.get(peerId);
             if (peer) {
@@ -571,33 +590,23 @@ function handleIncomingData(data, peerId) {
 
     let metadata = null;
     
-    // Check if it's metadata (either string or ArrayBuffer)
-    if (typeof data === 'string') {
-        console.log(`Received string data: ${data}`);
-        try { metadata = JSON.parse(data); } catch(e) { console.error('Error parsing metadata string:', e); }
-    } else if (data instanceof ArrayBuffer) {
-        try {
-            const text = new TextDecoder().decode(data);
-            console.log(`Received binary data as text: ${text}`);
-            // Verify if it's JSON and contains expected metadata keys
-            const parsed = JSON.parse(text);
-            if (parsed.name && parsed.size) {
-                metadata = parsed;
-            }
-        } catch(e) { console.log('Data is not metadata, treating as chunk'); }
-    }
-
     if (metadata) {
-        receivingFileName = metadata.name;
-        receivingFileSize = metadata.size;
-        receivedChunks = [];
-        fileNameDisp.textContent = receivingFileName;
-        fileSizeDisp.textContent = `0 ${formatSize(receivingFileSize).split(' ')[1]} / ${formatSize(receivingFileSize)}`;
-        progressContainer.classList.remove('hidden');
-        updateProgress(0, 0, receivingFileSize);
-        updateUIStatus('receiving');
-        showSnackbar(`Peer ${peerId.slice(0,4)} is sending: ${receivingFileName}`, 'info');
-        return;
+
+            receivingFileName = metadata.name;
+            receivingFileSize = metadata.size;
+            receivedChunks = [];
+            
+            const name = getPeerName(peerId);
+            appendChatMessage(`📥 ${name} is sending *${metadata.name}*...`, 'System', 'system');
+            
+            fileNameDisp.textContent = receivingFileName;
+            fileSizeDisp.textContent = `0 ${formatSize(receivingFileSize).split(' ')[1]} / ${formatSize(receivingFileSize)}`;
+            progressContainer.classList.remove('hidden');
+            updateProgress(0, 0, receivingFileSize);
+            updateUIStatus('receiving');
+            showSnackbar(`${name} is sending: ${receivingFileName}`, 'info');
+            return;
+
     }
 
     // It's a data chunk
@@ -606,20 +615,22 @@ function handleIncomingData(data, peerId) {
     const progress = Math.min(100, Math.floor((currentSize / receivingFileSize) * 100));
     updateProgress(progress, currentSize, receivingFileSize);
 
-    if (currentSize >= receivingFileSize) {
-        progressFill.classList.add('complete');
-        const blob = new Blob(receivedChunks);
-        const url = URL.createObjectURL(blob);
-        if (settings.autoDownload) {
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = receivingFileName;
-            a.click();
-        }
-        updateUIStatus('complete');
-        showSnackbar('File received successfully!', 'success');
-        
-        // Reset after completion
+        if (currentSize >= receivingFileSize) {
+            progressFill.classList.add('complete');
+            const blob = new Blob(receivedChunks);
+            const url = URL.createObjectURL(blob);
+            if (settings.autoDownload) {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = receivingFileName;
+                a.click();
+            }
+            updateUIStatus('complete');
+            showSnackbar('File received successfully!', 'success');
+            appendChatMessage(`✅ Received *${receivingFileName}*`, 'System', 'system');
+            
+            // Reset after completion
+
         receivingFileSize = 0;
         receivedChunks = [];
     }
@@ -632,7 +643,56 @@ function updateProgress(percent, current, total) {
     fileSizeDisp.textContent = `${formatSize(current)} / ${formatSize(total)}`;
 }
 
-// --- UI Event Listeners ---
+// UI Event Listeners
+document.querySelectorAll('.markup-btn').forEach(btn => {
+    btn.onclick = () => {
+        const type = btn.getAttribute('data-markup');
+        const start = chatInput.selectionStart;
+        const end = chatInput.selectionEnd;
+        const text = chatInput.value;
+        const selectedText = text.substring(start, end);
+        
+        const markers = {
+            bold: { start: '*', end: '*' },
+            italic: { start: '_', end: '_' },
+            strike: { start: '~~', end: '~~' },
+            code: { start: '`', end: '`' }
+        };
+        
+        const marker = markers[type];
+        
+        if (selectedText.length > 0) {
+            const isWrapped = selectedText.startsWith(marker.start) && selectedText.endsWith(marker.end);
+            
+            if (isWrapped) {
+                const unwrapped = selectedText.substring(marker.start.length, selectedText.length - marker.end.length);
+                chatInput.value = text.substring(0, start) + unwrapped + text.substring(end);
+                chatInput.focus();
+                chatInput.setSelectionRange(start, start + unwrapped.length);
+            } else {
+                const wrapped = `${marker.start}${selectedText}${marker.end}`;
+                chatInput.value = text.substring(0, start) + wrapped + text.substring(end);
+                chatInput.focus();
+                chatInput.setSelectionRange(start + marker.start.length, start + marker.start.length + selectedText.length);
+            }
+        } else {
+            const insertion = `${marker.start}${marker.end}`;
+            chatInput.value = text.substring(0, start) + insertion + text.substring(end);
+            chatInput.focus();
+            chatInput.setSelectionRange(start + marker.start.length, start + marker.start.length);
+        }
+    };
+});
+
+
+document.querySelectorAll('.suggestion-btn').forEach(btn => {
+    btn.onclick = () => {
+        chatInput.value = btn.textContent;
+        chatInput.focus();
+        sendChatMessage();
+    };
+});
+
 function sendChatMessage() {
     const text = chatInput.value.trim();
     if (!text) return;

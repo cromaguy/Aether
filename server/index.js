@@ -11,8 +11,6 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, '../client')));
 
-// We only use this Map to store the password/peer limits. 
-// We still rely on Socket.io's adapter to check if the room physically exists.
 const roomMetadata = new Map();
 
 io.on('connection', (socket) => {
@@ -36,7 +34,6 @@ io.on('connection', (socket) => {
     const room = io.sockets.adapter.rooms.get(id);
     const meta = roomMetadata.get(id);
     
-    // Room exists only if someone is physically in it
     if (room && room.size > 0) {
       socket.emit('room-info', { 
         exists: true, 
@@ -56,7 +53,6 @@ io.on('connection', (socket) => {
     const room = io.sockets.adapter.rooms.get(roomID);
     
     if (room && room.size > 0) {
-      // 2. Check metadata limits
       const meta = roomMetadata.get(roomID);
       
       if (meta?.password && meta.password !== password) {
@@ -76,7 +72,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('signal', ({ roomID, signal, to }) => {
-    // Supports both direct messaging (new) and broadcasting (old)
     if (to) {
       io.to(to).emit('signal', { signal, from: socket.id, roomID });
     } else {
@@ -87,7 +82,6 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     
-    // Auto-cleanup: remove metadata if the room is empty
     roomMetadata.forEach((value, key) => {
       if (!io.sockets.adapter.rooms.has(key)) {
         roomMetadata.delete(key);

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aether P2P File Transfer</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 </head>
 <body>
     <div id="settings-btn" title="Settings">⚙️</div>
@@ -173,9 +174,25 @@
                     <div id="chat-container" class="card chat-card hidden">
                         <h3>Chat</h3>
                         <div id="chat-messages"></div>
-                        <div class="chat-input-group">
-                            <input type="text" id="chat-input" placeholder="Type a message...">
-                            <button id="chat-send">Send</button>
+                        <div class="chat-controls">
+                            <div class="toolbar-row">
+                                <div class="markup-toolbar">
+                                    <button type="button" class="markup-btn" data-markup="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                                    <button type="button" class="markup-btn" data-markup="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                                    <button type="button" class="markup-btn" data-markup="strike" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
+                                    <button type="button" class="markup-btn" data-markup="code" title="Code"><i class="fa-solid fa-code"></i></button>
+                                </div>
+                                <div class="suggestions-toolbar">
+                                    <button type="button" class="suggestion-btn">Hello! 👋</button>
+                                    <button type="button" class="suggestion-btn">Ready to send? 📁</button>
+                                    <button type="button" class="suggestion-btn">Thanks! ✨</button>
+                                    <button type="button" class="suggestion-btn">OK 👍</button>
+                                </div>
+                            </div>
+                            <div class="chat-input-group">
+                                <input type="text" id="chat-input" placeholder="Type a message...">
+                                <button id="chat-send">Send</button>
+                            </div>
                         </div>
                     </div>
                 </aside>
