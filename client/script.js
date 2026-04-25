@@ -20,6 +20,8 @@ let isVerbose = false;
 let userRole = '';
 let iceCandidateQueue = new Map(); // peerId -> [candidates]
 let handshakeTimer = null;
+let typingTimer = null;
+const remoteTypingTimers = new Map(); // peerId -> timer
 
 // Dynamic Settings
 let settings = {
@@ -95,6 +97,34 @@ function appendChatMessage(text, sender, type) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+function showTypingIndicator(name) {
+    let indicator = document.getElementById('typing-indicator');
+    
+    if (indicator) {
+        indicator.querySelector('.typing-text').textContent = `${name} is typing...`;
+        return;
+    }
+
+    indicator = document.createElement('div');
+    indicator.id = 'typing-indicator';
+    indicator.className = 'typing-indicator';
+    indicator.innerHTML = `
+        <span class="typing-text">${name} is typing...</span>
+        <div class="typing-dots">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+        </div>
+    `;
+    chatMessages.appendChild(indicator);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function hideTypingIndicator() {
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) indicator.remove();
+}
+
 function updatePeersList() {
     peersList.innerHTML = '';
     peers.forEach((peer, id) => {
@@ -137,6 +167,7 @@ function hideLoader() {
 settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
 closeSettings.onclick = () => settingsModal.classList.add('hidden');
 closeSettingsX.onclick = () => settingsModal.classList.add('hidden');
+
 
 verboseToggle.onchange = (e) => {
     settings.verbose = e.target.checked;
@@ -512,6 +543,19 @@ function handleIncomingData(data, peerId) {
             const peer = peers.get(peerId);
             const name = peer?.username || `Peer ${peerId.slice(0,4)}`;
             appendChatMessage(msg, name, 'received');
+            hideTypingIndicator();
+            return;
+        }
+        if (data.startsWith('TYPING:')) {
+            const peer = peers.get(peerId);
+            const name = peer?.username || `Peer ${peerId.slice(0,4)}`;
+            showTypingIndicator(name);
+            if (remoteTypingTimers.has(peerId)) clearTimeout(remoteTypingTimers.get(peerId));
+            const timer = setTimeout(() => {
+                hideTypingIndicator();
+                remoteTypingTimers.delete(peerId);
+            }, 3000);
+            remoteTypingTimers.set(peerId, timer);
             return;
         }
         if (data.startsWith('USER_INFO:')) {
@@ -608,6 +652,13 @@ function sendChatMessage() {
 chatSend.onclick = sendChatMessage;
 chatInput.onkeypress = (e) => {
     if (e.key === 'Enter') sendChatMessage();
+};
+
+chatInput.oninput = () => {
+    const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
+    if (activePeers.length === 0) return;
+
+    activePeers.forEach(([id, p]) => p.dc.send('TYPING:'));
 };
 
 dropZone.onclick = () => fileInput.click();

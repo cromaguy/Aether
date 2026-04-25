@@ -1,29 +1,53 @@
 :root {
+    /* Theme-Independent Variables */
     --accent-color: #38bdf8;
     --accent-hover: #7dd3fc;
     --accent-glow: rgba(56, 189, 248, 0.3);
-    --bg-color: #0f172a;
-    --bg-dark: #0b1120;
-    --card-bg: rgba(30, 41, 59, 0.7);
-    --card-border: rgba(255, 255, 255, 0.08);
-    --text-color: #f8fafc;
-    --text-muted: #94a3b8;
-    --text-dim: #64748b;
     --danger: #ef4444;
     --success: #22c55e;
-    --glass-bg: rgba(15, 23, 42, 0.8);
+    --transition-speed: 0.2s;
+}
+
+/* Light Theme (Default/System) */
+:root {
+    --bg-color: #f8fafc;
+    --bg-dark: #f1f5f9;
+    --card-bg: rgba(255, 255, 255, 0.8);
+    --text-color: #0f172a;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+    --glass-bg: rgba(241, 245, 249, 0.8);
+    --input-bg: #ffffff;
+    --input-border: #e2e8f0;
+    --hover-bg: rgba(56, 189, 248, 0.1);
+}
+
+/* Dark Theme (System Preference) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #0f172a;
+        --bg-dark: #0b1120;
+        --card-bg: rgba(30, 41, 59, 0.7);
+        --text-color: #f8fafc;
+        --text-muted: #94a3b8;
+        --text-dim: #64748b;
+        --glass-bg: rgba(15, 23, 42, 0.8);
+        --input-bg: #1e293b;
+        --input-border: rgba(255, 255, 255, 0.08);
+        --hover-bg: rgba(56, 189, 248, 0.08);
+    }
 }
 
 * {
     box-sizing: border-box;
-    transition: all 0.2s ease;
+    transition: background-color var(--transition-speed), color var(--transition-speed), transform var(--transition-speed), box-shadow var(--transition-speed);
 }
 
 body {
     font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     background-color: var(--bg-color);
     background-image: 
-        radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 0% 0%, var(--hover-bg) 0%, transparent 50%),
         radial-gradient(circle at 100% 100%, rgba(168, 85, 247, 0.05) 0%, transparent 50%);
     color: var(--text-color);
     margin: 0;
@@ -53,10 +77,9 @@ body {
 h1 {
     font-size: 3.5rem;
     margin: 0;
-    color: var(--text-color);
     font-weight: 800;
     letter-spacing: -2px;
-    background: linear-gradient(to right, #fff, var(--accent-color));
+    background: linear-gradient(to right, var(--text-color), var(--accent-color));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -80,16 +103,14 @@ h1 {
     backdrop-filter: blur(12px);
     padding: 2rem;
     border-radius: 1.5rem;
-    border: 1px solid var(--card-border);
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
     position: relative;
     overflow: hidden;
 }
 
 .card:hover {
-    border-color: var(--accent-color);
+    background: var(--hover-bg);
     transform: translateY(-4px);
-    box-shadow: 0 0 20px var(--accent-glow);
 }
 
 .card h2 {
@@ -156,12 +177,11 @@ h1 {
 }
 
 .peer-item {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-dark);
     padding: 6px 12px;
     border-radius: 20px;
     font-size: 0.85rem;
     color: var(--text-color);
-    border: 1px solid var(--card-border);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -205,7 +225,80 @@ h1 {
     border-radius: 1.2rem;
     max-width: 80%;
     line-height: 1.4;
+    animation: messageAppear 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
+
+.chat-msg.sent {
+    align-self: flex-end;
+    background: var(--accent-color);
+    color: #0f172a;
+    border-bottom-right-radius: 4px;
+    animation-name: messageAppearSent;
+}
+
+.chat-msg.received {
+    align-self: flex-start;
+    background: var(--bg-dark);
+    color: var(--text-color);
+    border-bottom-left-radius: 4px;
+    animation-name: messageAppearReceived;
+}
+
+@keyframes messageAppearSent {
+    from { opacity: 0; transform: translateX(20px) scale(0.8); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes messageAppearReceived {
+    from { opacity: 0; transform: translateX(-20px) scale(0.8); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes messageAppear {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Typing Indicator */
+.typing-indicator {
+    align-self: flex-start;
+    background: var(--bg-dark);
+    padding: 8px 16px;
+    border-radius: 1.2rem;
+    border-bottom-left-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.typing-text {
+    font-style: italic;
+}
+
+.typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.typing-dot {
+    width: 4px;
+    height: 4px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-4px); }
+}
+
 
 .chat-msg.sent {
     align-self: flex-end;
@@ -216,8 +309,8 @@ h1 {
 
 .chat-msg.received {
     align-self: flex-start;
-    background: #334155;
-    color: white;
+    background: var(--bg-dark);
+    color: var(--text-color);
     border-bottom-left-radius: 4px;
 }
 
@@ -233,7 +326,7 @@ h1 {
 .chat-input-group {
     display: flex;
     gap: 10px;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--bg-dark);
     padding: 8px;
     border-radius: 1rem;
 }
@@ -244,18 +337,16 @@ h1 {
 }
 
 .drop-zone {
-    border: 2px dashed var(--card-border);
     border-radius: 1.5rem;
     padding: 6rem 2rem;
     cursor: pointer;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--bg-dark);
     text-align: center;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .drop-zone:hover, .drop-zone.drag-over {
-    background: rgba(56, 189, 248, 0.05);
-    border-color: var(--accent-color);
+    background: var(--hover-bg);
     transform: scale(1.01);
     box-shadow: 0 0 30px var(--accent-glow);
 }
@@ -292,12 +383,11 @@ h1 {
 }
 
 .progress-bar {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--bg-dark);
     border-radius: 1rem;
     height: 14px;
     width: 100%;
     overflow: hidden;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
 }
 
 #progress-fill {
@@ -315,7 +405,7 @@ h1 {
 
 /* Form Elements */
 button {
-    background: linear-gradient(135deg, var(--accent-color), #0ea5e9);
+    background-color: var(--accent-color);
     color: #0f172a;
     border: none;
     padding: 0.8rem 1.8rem;
@@ -333,9 +423,9 @@ button:hover {
 }
 
 input, select {
-    background: #1e293b;
-    color: white;
-    border: 1px solid var(--card-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    border: 1px solid var(--input-border);
     padding: 0.8rem;
     border-radius: 0.8rem;
     font-size: 1rem;
@@ -367,7 +457,7 @@ input:focus, select:focus {
     font-weight: 500;
 }
 
-/* Settings Modal - High Fidelity */
+/* Settings Modal */
 #settings-btn {
     position: fixed;
     top: 30px;
@@ -382,19 +472,18 @@ input:focus, select:focus {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    border: 1px solid var(--card-border);
     backdrop-filter: blur(10px);
 }
 
 #settings-btn:hover {
     transform: rotate(45deg);
-    border-color: var(--accent-color);
+    background: var(--hover-bg);
 }
 
 #settings-modal {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(15, 23, 42, 0.85);
+    background: var(--glass-bg);
     backdrop-filter: blur(16px);
     display: flex;
     justify-content: center;
@@ -405,7 +494,6 @@ input:focus, select:focus {
 
 .modal-content {
     background: var(--bg-dark);
-    border: 1px solid var(--card-border);
     width: 450px;
     max-height: 90vh;
     border-radius: 2rem;
@@ -417,7 +505,6 @@ input:focus, select:focus {
 
 .modal-header {
     padding: 1.5rem 2rem;
-    border-bottom: 1px solid var(--card-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -439,7 +526,7 @@ input:focus, select:focus {
 }
 
 .close-x:hover {
-    color: white;
+    color: var(--text-color);
     transform: none;
 }
 
@@ -506,21 +593,20 @@ input:focus, select:focus {
 
 .modal-footer {
     padding: 1.5rem 2rem;
-    border-top: 1px solid var(--card-border);
     text-align: right;
 }
 
 .btn-secondary {
-    background: #334155;
-    color: white;
+    background: var(--bg-dark);
+    color: var(--text-color);
 }
 
 .btn-secondary:hover {
-    background: #475569;
+    background: var(--hover-bg);
 }
 
 .btn-danger {
-    background: linear-gradient(135deg, var(--danger), #b91c1c);
+    background-color: var(--danger);
     color: white;
     width: 100%;
 }
@@ -535,13 +621,12 @@ input:focus, select:focus {
     height: 28px;
     border-radius: 50%;
     cursor: pointer;
-    border: 2px solid transparent;
     box-shadow: 0 0 0 2px var(--bg-dark);
 }
 
 .color-option.active {
-    border-color: white;
     transform: scale(1.2);
+    box-shadow: 0 0 0 2px var(--text-color);
 }
 
 /* Toggle Switch */
@@ -558,7 +643,7 @@ input:focus, select:focus {
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #334155;
+    background-color: var(--bg-dark);
     transition: .3s;
     border-radius: 34px;
 }
@@ -570,7 +655,7 @@ input:focus, select:focus {
     width: 18px;
     left: 3px;
     bottom: 3px;
-    background-color: white;
+    background-color: var(--text-color);
     transition: .3s;
     border-radius: 50%;
 }
@@ -595,11 +680,11 @@ input:checked + .slider:before { transform: translateX(24px); }
 .snackbar {
     background: var(--glass-bg);
     backdrop-filter: blur(10px);
-    color: white;
+    color: var(--text-color);
     padding: 14px 24px;
     border-radius: 1rem;
     border-left: 4px solid var(--accent-color);
-    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     font-size: 0.9rem;
     animation: slideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), fadeOut 0.5s ease-in 4.5s forwards;
 }
@@ -610,7 +695,7 @@ input:checked + .slider:before { transform: translateX(24px); }
 #loader {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--glass-bg);
     backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
@@ -639,9 +724,12 @@ input:checked + .slider:before { transform: translateX(24px); }
 }
 
 @media (max-width: 600px) {
-    .container { padding: 1rem; }
+    .container {
+        padding: 1rem;
+    }
+    
     h1 { font-size: 2.5rem; }
     .setup-grid { grid-template-columns: 1fr; }
-    .card { padding: 1.5rem; }
-    .modal-content { width: 90vw; }
+    .card { padding: 1.2rem; }
+    .modal-content { width: 92vw; }
 }
