@@ -476,3 +476,91 @@ input:checked + .slider:before {
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
+
+.peers-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.peer-item {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.peer-item::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background-color: #4ade80;
+    border-radius: 50%;
+}
+
+#chat-container {
+    margin-top: 2rem;
+    background-color: var(--card-bg);
+    border-radius: 1rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    height: 300px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+#chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+    margin-bottom: 1rem;
+}
+
+.chat-msg {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.chat-msg.sent {
+    align-self: flex-end;
+    background-color: var(--accent-color);
+    color: #0f172a;
+}
+
+.chat-msg.received {
+    align-self: flex-start;
+    background-color: #334155;
+    color: white;
+}
+
+.chat-msg .sender {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.chat-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.chat-input-group input {
+    flex: 1;
+    margin-right: 0;
+}
+

@@ -23,6 +23,7 @@ let handshakeTimer = null;
 
 // Dynamic Settings
 let settings = {
+    username: '',
     accentColor: '#38bdf8',
     verbose: false,
     chunkSize: 16384,
@@ -47,6 +48,11 @@ const fileSizeDisp = document.getElementById('file-size');
 const dropZone = document.getElementById('drop-zone');
 const dropZoneText = document.getElementById('drop-zone-text');
 const fileInput = document.getElementById('file-input');
+const peersList = document.getElementById('peers-list');
+const chatContainer = document.getElementById('chat-container');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
 
 // Settings Elements
 const settingsBtn = document.getElementById('settings-btn');
@@ -56,6 +62,7 @@ const verboseToggle = document.getElementById('verbose-toggle');
 const chunkSizeSelect = document.getElementById('chunk-size-select');
 const bufferLimitSelect = document.getElementById('buffer-limit-select');
 const autoDownloadToggle = document.getElementById('auto-download-toggle');
+const usernameInput = document.getElementById('username-input');
 const hostSettings = document.getElementById('host-settings');
 const disconnectPeerBtn = document.getElementById('disconnect-peer-btn');
 
@@ -77,6 +84,25 @@ function showSnackbar(message, type = 'info') {
     snack.textContent = message;
     container.appendChild(snack);
     setTimeout(() => snack.remove(), 5000);
+}
+
+function appendChatMessage(text, sender, type) {
+    const msg = document.createElement('div');
+    msg.className = `chat-msg ${type}`;
+    msg.innerHTML = `<span class="sender">${sender}</span>${text}`;
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function updatePeersList() {
+    peersList.innerHTML = '';
+    peers.forEach((peer, id) => {
+        const item = document.createElement('div');
+        item.className = 'peer-item';
+        const name = peer.username || `Peer ${id.slice(0, 4)}`;
+        item.textContent = name;
+        peersList.appendChild(item);
+    });
 }
 
 function updateUIStatus(key, customLayman = null, customTech = null) {
@@ -115,6 +141,11 @@ verboseToggle.onchange = (e) => {
     saveSettings();
 };
 
+usernameInput.oninput = (e) => {
+    settings.username = e.target.value.trim();
+    saveSettings();
+};
+
 chunkSizeSelect.onchange = (e) => {
     settings.chunkSize = parseInt(e.target.value);
     saveSettings();
@@ -149,11 +180,13 @@ disconnectPeerBtn.onclick = () => {
         peer.pc.close();
     });
     peers.clear();
-    dataChannels.clear(); // Not defined yet in current script, will use peers map
     showSnackbar('All peers disconnected.', 'info');
+    updatePeersList();
     transferSection.classList.add('hidden');
     setupSection.classList.remove('hidden');
     connectionDot.className = 'dot disconnected';
+    chatContainer.classList.add('hidden');
+    chatMessages.innerHTML = '';
 };
 
 function saveSettings() {
@@ -170,6 +203,7 @@ function loadSettings() {
         chunkSizeSelect.value = settings.chunkSize;
         bufferLimitSelect.value = settings.bufferLimit;
         autoDownloadToggle.checked = settings.autoDownload;
+        usernameInput.value = settings.username || '';
         document.querySelectorAll('.color-option').forEach(opt => {
             if (opt.getAttribute('data-color') === settings.accentColor) opt.classList.add('active');
             else opt.classList.remove('active');
@@ -305,22 +339,14 @@ socket.on('error', (msg) => {
 });
 
 socket.on('peer-joined', ({ peerId, roomID }) => {
-    console.log(`Peer ${peerId} joined. Waiting for guest offer.`);
+    console.log(`Peer ${peerId} joined. Initiating offer...`);
     showSnackbar(`Peer ${peerId.slice(0,4)} joined!`, 'success');
-    // REMOVED: createOffer(peerId); 
+    createOffer(peerId); 
 });
 
 socket.on('joined-successfully', (roomID) => {
-    // Peer joined, now WE (the guest) initiate the offer
     userRole = 'Guest/Receiver';
-    console.log("Joined successfully, initiating offer as guest.");
-    // Need a peerId to create offer, but it's not provided here.
-    // The signaling server should provide it or we need to find it.
-    // Actually, the signaling server triggers 'peer-joined' only on the host.
-    // The guest needs to know who to signal to.
-    
-    // Simplest fix: Just let the host initiate if we are the guest? No, that causes collision.
-    // Okay, the guest needs the Host's PeerID.
+    console.log("Joined successfully, waiting for host offer.");
 });
 
 socket.on('signal', async ({ signal, from, roomID }) => {
@@ -375,7 +401,14 @@ async function createOffer(peerId) {
 }
 
 function setupDataChannelEvents(peerId, dc) {
+    const peer = peers.get(peerId);
+    if (peer) peer.dc = dc;
+
     dc.onopen = () => {
+        // Send username to peer
+        const username = settings.username || 'Anonymous';
+        dc.send(`USER_INFO:${username}`);
+
         hideLoader();
         roleBadge.textContent = userRole;
         updateUIStatus('connected');
@@ -383,10 +416,14 @@ function setupDataChannelEvents(peerId, dc) {
         transferSection.classList.remove('hidden');
         updateUIStatus('waiting-file');
         showSnackbar(`Connected to peer ${peerId.slice(0,4)}`, 'success');
+        updatePeersList();
+        chatContainer.classList.remove('hidden');
     };
 
     dc.onclose = () => {
         showSnackbar(`Peer ${peerId.slice(0,4)} disconnected.`, 'error');
+        peers.delete(peerId);
+        updatePeersList();
     };
 
     dc.onmessage = (event) => {
@@ -466,6 +503,26 @@ async function sendFile(file) {
 
 function handleIncomingData(data, peerId) {
     console.log(`Received data from peer ${peerId}, type: ${typeof data}, length: ${data.byteLength || data.length}`);
+    
+    if (typeof data === 'string') {
+        if (data.startsWith('CHAT:')) {
+            const msg = data.substring(5);
+            const peer = peers.get(peerId);
+            const name = peer?.username || `Peer ${peerId.slice(0,4)}`;
+            appendChatMessage(msg, name, 'received');
+            return;
+        }
+        if (data.startsWith('USER_INFO:')) {
+            const username = data.substring(10);
+            const peer = peers.get(peerId);
+            if (peer) {
+                peer.username = username;
+                updatePeersList();
+            }
+            return;
+        }
+    }
+
     let metadata = null;
     
     // Check if it's metadata (either string or ArrayBuffer)
@@ -530,6 +587,27 @@ function updateProgress(percent, current, total) {
 }
 
 // --- UI Event Listeners ---
+function sendChatMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+
+    const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
+    if (activePeers.length === 0) {
+        showSnackbar('No connected peers to chat with!', 'error');
+        return;
+    }
+
+    const chatMsg = `CHAT:${text}`;
+    activePeers.forEach(([id, p]) => p.dc.send(chatMsg));
+    appendChatMessage(text, 'Me', 'sent');
+    chatInput.value = '';
+}
+
+chatSend.onclick = sendChatMessage;
+chatInput.onkeypress = (e) => {
+    if (e.key === 'Enter') sendChatMessage();
+};
+
 dropZone.onclick = () => fileInput.click();
 fileInput.onchange = (e) => {
     if (e.target.files[0]) sendFile(e.target.files[0]);
