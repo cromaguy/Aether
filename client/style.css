@@ -814,20 +814,85 @@ input:checked + .slider:before { transform: translateX(24px); }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
-    .transfer-grid { grid-template-columns: 1fr; }
-    .transfer-sidebar { order: 2; }
-    .transfer-main { order: 1; }
+    .transfer-grid { 
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    .transfer-sidebar { 
+        order: 2;
+        width: 100%;
+    }
+    
+    .transfer-main { 
+        order: 1;
+        width: 100%;
+    }
 }
 
 @media (max-width: 600px) {
     .container {
+        padding: 1rem 0.75rem;
+    }
+    
+    .app-header {
+        margin-bottom: 2.5rem;
+    }
+
+    h1 { 
+        font-size: 2.2rem; 
+        letter-spacing: -1px;
+    }
+    
+    .setup-grid { 
+        grid-template-columns: 1fr; 
+        gap: 1rem;
+    }
+    
+    .card { 
+        padding: 1.25rem; 
+        border-radius: 1.25rem;
+    }
+
+    .drop-zone {
+        padding: 3rem 1rem;
+    }
+
+    .upload-icon {
+        font-size: 3rem;
+    }
+
+    .chat-card {
+        height: 400px;
+    }
+
+    .toolbar-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .markup-toolbar {
+        justify-content: center;
+    }
+
+    .suggestions-toolbar {
+        justify-content: center;
+    }
+
+    .modal-content { 
+        width: 95vw; 
+        border-radius: 1.5rem;
         padding: 1rem;
     }
     
-    h1 { font-size: 2.5rem; }
-    .setup-grid { grid-template-columns: 1fr; }
-    .card { padding: 1.2rem; }
-    .modal-content { width: 92vw; }
+    .modal-header, .modal-footer {
+        padding: 1rem;
+    }
+
+    .settings-body {
+        padding: 1rem;
+    }
 }
 
 /* Custom Scrollbars */
