@@ -5,32 +5,306 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aether P2P File Transfer</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="assets/Aether.png" type="image/png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
-    <div id="settings-btn" title="Settings">⚙️</div>
-    
-    <div id="settings-modal" class="hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Settings</h2>
-                <button id="close-settings-x" class="close-x">&times;</button>
-            </div>
+    <!-- Desktop Navigation Rail -->
+    <nav class="nav-rail">
+        <div class="nav-rail-inner">
+            <a href="#" class="rail-item active" data-page="home" title="Home">
+                <i class="fas fa-home"></i>
+            </a>
+            <a href="#" class="rail-item" data-page="transfer" title="Transfer">
+                <i class="fas fa-exchange-alt"></i>
+            </a>
+            <a href="#" class="rail-item" data-page="chat" title="Chat">
+                <i class="fas fa-comment-dots"></i>
+            </a>
+            <a href="#" class="rail-item" data-page="history" title="History">
+                <i class="fas fa-history"></i>
+            </a>
+            <a href="#" class="rail-item" data-page="settings" title="Settings">
+                <i class="fas fa-cog"></i>
+            </a>
+        </div>
+    </nav>
+
+    <div id="snackbar-container"></div>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="nav-bottom">
+        <a href="#" class="nav-bottom-item active" data-page="home" title="Home">
+            <i class="fas fa-home"></i>
+            <span>Home</span>
+        </a>
+        <a href="#" class="nav-bottom-item" data-page="transfer" title="Transfer">
+            <i class="fas fa-exchange-alt"></i>
+            <span>Transfer</span>
+        </a>
+        <a href="#" class="nav-bottom-item" data-page="chat" title="Chat">
+            <i class="fas fa-comment-dots"></i>
+            <span>Chat</span>
+        </a>
+        <a href="#" class="nav-bottom-item" data-page="history" title="History">
+            <i class="fas fa-history"></i>
+            <span>History</span>
+        </a>
+        <a href="#" class="nav-bottom-item" data-page="settings" title="Settings">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+        </a>
+    </nav>
+
+    <div class="container">
+        <!-- ===== HOME / ROOM MANAGEMENT VIEW ===== -->
+        <div id="home-view" class="view-section">
+            <header class="app-header">
+                <h1>Aether P2P</h1>
+            </header>
             
-            <div class="settings-body">
+            <div id="setup-section">
+                <div class="setup-grid">
+                    <div class="card">
+                        <h2>Create a Room</h2>
+                        <div class="setup-inputs">
+                            <div class="input-group">
+                                <label>Max Peers</label>
+                                <input type="number" id="create-max-peers" value="2" min="2" max="10">
+                            </div>
+                            <div class="input-group">
+                                <label>Password (Optional)</label>
+                                <input type="password" id="create-password" placeholder="Set password">
+                            </div>
+                        </div>
+                        <button id="create-room-btn">Create Room</button>
+                        <p id="room-display" class="hidden">Your Room Code: <span id="room-id"></span></p>
+                    </div>
+                    <div class="card">
+                        <h2>Join a Room</h2>
+                        <div class="setup-inputs">
+                            <div class="input-group">
+                                <label>Room Code</label>
+                                <input type="text" id="join-room-input" placeholder="Enter Code">
+                            </div>
+                            <div id="join-password-group" class="input-group hidden">
+                                <label>Password</label>
+                                <input type="password" id="join-password" placeholder="Enter Password">
+                            </div>
+                        </div>
+                        <button id="join-room-btn">Join Room</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loader" class="hidden">
+                <div class="spinner"></div>
+                <p id="loader-text">Processing...</p>
+            </div>
+
+            <!-- Room Management (shown when connected) -->
+            <div id="transfer-section" class="hidden">
+                <div class="transfer-grid">
+                    <aside class="transfer-sidebar">
+                        <div class="card status-card">
+                            <div class="status-bar">
+                                <span id="connection-dot" class="dot"></span>
+                                <span id="role-badge" class="badge">Connecting...</span>
+                            </div>
+                            <div id="status" class="status-text">Connecting...</div>
+                        </div>
+                        
+                        <div class="card peers-card">
+                            <h3>Connected Peers</h3>
+                            <div id="peers-list" class="peers-list"></div>
+                        </div>
+
+                        <div class="card">
+                            <button id="disconnect-room-btn" style="width: 100%; padding: 0.75rem; background: #ef4444; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s ease;">
+                                <i class="fa-solid fa-right-from-bracket"></i> Disconnect Room
+                            </button>
+                        </div>
+
+                        <div id="chat-container" class="card chat-card hidden">
+                            <h3>Chat</h3>
+                            <div id="chat-messages"></div>
+                            <div class="chat-controls">
+                                <div class="toolbar-row">
+                                    <div class="markup-toolbar">
+                                        <button type="button" class="markup-btn" data-markup="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                                        <button type="button" class="markup-btn" data-markup="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                                        <button type="button" class="markup-btn" data-markup="strike" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
+                                        <button type="button" class="markup-btn" data-markup="code" title="Code"><i class="fa-solid fa-code"></i></button>
+                                    </div>
+                                    <div class="suggestions-toolbar">
+                                        <button type="button" class="suggestion-btn">Hello!</button>
+                                        <button type="button" class="suggestion-btn">Ready to send?</button>
+                                        <button type="button" class="suggestion-btn">Thanks</button>
+                                        <button type="button" class="suggestion-btn">OK</button>
+                                    </div>
+                                </div>
+                                <div class="chat-input-group">
+                                    <button id="chat-attach" class="attach-btn" title="Attach file"><i class="fas fa-paperclip"></i></button>
+                                    <input type="file" id="chat-file-input" hidden>
+                                    <input type="text" id="chat-input" placeholder="Type a message...">
+                                    <button id="chat-send">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <main class="transfer-main">
+                        <!-- Hero buttons for Transfer and Chat -->
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <button onclick="navigateTo('transfer')" style="padding: 1.5rem; font-size: 1.1rem; border-radius: 12px; background: var(--accent-color); color: white; border: none; cursor: pointer; font-weight: 600;">
+                                <i class="fas fa-exchange-alt"></i> Go to Transfer
+                            </button>
+                            <button onclick="navigateTo('chat')" style="padding: 1.5rem; font-size: 1.1rem; border-radius: 12px; background: var(--accent-color); color: white; border: none; cursor: pointer; font-weight: 600;">
+                                <i class="fas fa-comment-dots"></i> Go to Chat
+                            </button>
+                        </div>
+                    </main>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== TRANSFER / FILE TRANSFER VIEW ===== -->
+        <div id="transfer-view" class="view-section hidden">
+            <header class="app-header">
+                <h1>File Transfer</h1>
+            </header>
+
+            <!-- Not Connected State -->
+            <div id="transfer-not-connected" class="not-connected-state">
+                <div class="not-connected-icon"><i class="fa fa-exclamation-triangle"></i></div>
+                <h2>Not Connected</h2>
+                <p>Create or join a room on the <strong>Home</strong> tab to start transferring files.</p>
+                <button onclick="navigateTo('home')" class="btn-primary">Go to Home</button>
+            </div>
+
+            <!-- Transfer Content (hidden when not connected) -->
+            <div id="transfer-content" style="display: none;">
+                <div class="card upload-card" style="max-width: 600px; margin: 2rem auto;">
+                    <div class="drop-zone" id="drop-zone">
+                    <div class="drop-zone-content">
+                        <div class="upload-icon"><i class="fas fa-file-upload fa-2x"></i></div>
+                        <p id="drop-zone-text">Drag & Drop file here or <span>browse</span></p>
+                    </div>
+                    <input type="file" id="file-input" hidden>
+                </div>
+            </div>
+
+            <div id="progress-container" class="card progress-card hidden" style="max-width: 600px; margin: 2rem auto;">
+                <div class="file-info">
+                    <span id="file-name">Filename.ext</span>
+                    <span id="file-size">0 MB / 0 MB</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="progress-fill"></div>
+                </div>
+                <p id="progress-text">0%</p>
+            </div>
+            </div>
+        </div>
+
+        <!-- ===== CHAT VIEW ===== -->
+        <div id="chat-view" class="view-section hidden">
+            <header class="app-header">
+                <h1>Room Chat</h1>
+                <p class="status-text" style="margin-top: 8px;">Room Code: <span id="current-room-display" style="color: var(--accent-color); font-weight: bold;">Not Connected</span></p>
+            </header>
+
+            <!-- Not Connected State -->
+            <div id="chat-not-connected" class="not-connected-state">
+                <div class="not-connected-icon"><i class="fa fa-comment"></i></div>
+                <h2>Not Connected</h2>
+                <p>Create or join a room on the <strong>Home</strong> tab to start chatting.</p>
+                <button onclick="navigateTo('home')" class="btn-primary">Go to Home</button>
+            </div>
+
+            <!-- Chat Content (hidden when not connected) -->
+            <div id="chat-content" style="display: none;">
+                <div class="chat-wrapper" style="max-width: 800px; margin: 0 auto; height: 65vh; display: flex; flex-direction: column;">
+                    <div class="card chat-card" style="flex: 1; display: flex; flex-direction: column; height: 100%; padding: 1.5rem;">
+                        
+                        <div class="status-bar" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--input-border); padding-bottom: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span id="connection-dot-chat" class="dot disconnected"></span>
+                                <span id="status-chat" class="status-text">Waiting for connection...</span>
+                            </div>
+                            <div class="peer-count" style="font-size: 0.85rem; color: var(--text-muted);">
+                                <i class="fas fa-users"></i> <span id="peer-count-display">0</span> Peers
+                            </div>
+                        </div>
+                        
+                        <div id="chat-messages-view" style="flex: 1; overflow-y: auto; margin-bottom: 1rem; border-radius: 12px; padding: 16px; background: var(--bg-dark); border: 1px solid var(--input-border);">
+                            <div class="chat-msg system"><span>Welcome to Aether Chat. Connect to a room to start messaging.</span></div>
+                        </div>
+
+                        <div class="chat-controls">
+                            <div class="toolbar-row" style="margin-bottom: 12px;">
+                                <div class="markup-toolbar">
+                                    <button type="button" class="markup-btn" data-markup="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                                    <button type="button" class="markup-btn" data-markup="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                                    <button type="button" class="markup-btn" data-markup="strike" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
+                                    <button type="button" class="markup-btn" data-markup="code" title="Code"><i class="fa-solid fa-code"></i></button>
+                                </div>
+                                <div class="suggestions-toolbar">
+                                    <button type="button" class="suggestion-btn">Hello!</button>
+                                    <button type="button" class="suggestion-btn">Ready to receive?</button>
+                                    <button type="button" class="suggestion-btn">Thanks</button>
+                                </div>
+                            </div>
+                            <div class="chat-input-group">
+                                <button id="chat-attach-view" class="attach-btn" title="Attach file"><i class="fas fa-paperclip"></i></button>
+                                <input type="file" id="chat-file-input-view" hidden>
+                                <input type="text" id="chat-input-view" placeholder="Type a message..." autocomplete="off">
+                                <button id="chat-send-view">Send</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== HISTORY VIEW ===== -->
+        <div id="history-view" class="view-section hidden">
+            <header class="app-header">
+                <h1>Transfer History</h1>
+            </header>
+
+            <div class="card">
+                <div class="history-toolbar">
+                    <button id="clear-history-btn" class="btn-danger" type="button">Clear History</button>
+                </div>
+                <div id="history-list">
+                    <p class="muted">No history yet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== SETTINGS VIEW ===== -->
+        <div id="settings-view" class="view-section hidden">
+            <header class="app-header">
+                <h1>Settings</h1>
+            </header>
+
+            <div style="max-width: 700px; margin: 0 auto;">
                 <div class="settings-group">
                     <div class="group-header">
-                        <span class="group-icon">👤</span>
+                        <span class="group-icon"><i class="fas fa-user"></i></span>
                         <h3>General</h3>
                     </div>
-                    <div class="setting-item">
+                    <div class="card setting-item">
                         <div class="setting-info">
                             <span class="setting-label">Username</span>
                             <span class="setting-desc">How you appear to others</span>
                         </div>
                         <input type="text" id="username-input" placeholder="Anonymous" class="settings-input">
                     </div>
-                    <div class="setting-item">
+                    <div class="card setting-item">
                         <div class="setting-info">
                             <span class="setting-label">Verbose Mode</span>
                             <span class="setting-desc">Show technical logs</span>
@@ -40,7 +314,7 @@
                             <span class="slider round"></span>
                         </label>
                     </div>
-                    <div class="setting-item">
+                    <div class="card setting-item">
                         <div class="setting-info">
                             <span class="setting-label">Accent Color</span>
                             <span class="setting-desc">Personalize the interface</span>
@@ -56,10 +330,10 @@
 
                 <div class="settings-group">
                     <div class="group-header">
-                        <span class="group-icon">⚡</span>
+                        <span class="group-icon"><i class="fas fa-bolt"></i></span>
                         <h3>Network & Transfer</h3>
                     </div>
-                    <div class="setting-item">
+                    <div class="card setting-item">
                         <div class="setting-info">
                             <span class="setting-label">Chunk Size</span>
                             <span class="setting-desc">Data packet size</span>
@@ -70,7 +344,7 @@
                             <option value="262144">256 KB (Fast)</option>
                         </select>
                     </div>
-                    <div class="setting-item">
+                    <div class="card setting-item">
                         <div class="setting-info">
                             <span class="setting-label">Buffer Limit</span>
                             <span class="setting-desc">Max pending data</span>
@@ -81,7 +355,7 @@
                             <option value="16777216">16 MB (Aggressive)</option>
                         </select>
                     </div>
-                    <div class="setting-item">
+                    <div class="card setting-item">
                         <div class="setting-info">
                             <span class="setting-label">Auto-Download</span>
                             <span class="setting-desc">Save files automatically</span>
@@ -95,135 +369,18 @@
 
                 <div id="host-settings" class="settings-group hidden">
                     <div class="group-header">
-                        <span class="group-icon">🛠️</span>
+                        <span class="group-icon"><i class="fas fa-tools"></i></span>
                         <h3>Room Control</h3>
                     </div>
-                    <div class="setting-item">
-                        <button id="disconnect-peer-btn" class="btn-danger">Disconnect All Peers</button>
+                    <div class="card setting-item">
+                        <button id="disconnect-peers-settings-btn" class="btn-danger">Disconnect All Peers</button>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button id="close-settings" class="btn-secondary">Save & Close</button>
             </div>
         </div>
     </div>
 
-    <div id="snackbar-container"></div>
-
-    <div class="container">
-        <header class="app-header">
-            <h1>Aether P2P</h1>
-        </header>
-        
-        <div id="setup-section">
-            <div class="setup-grid">
-                <div class="card">
-                    <h2>Create a Room</h2>
-                    <div class="setup-inputs">
-                        <div class="input-group">
-                            <label>Max Peers</label>
-                            <input type="number" id="create-max-peers" value="2" min="2" max="10">
-                        </div>
-                        <div class="input-group">
-                            <label>Password (Optional)</label>
-                            <input type="password" id="create-password" placeholder="Set password">
-                        </div>
-                    </div>
-                    <button id="create-room-btn">Create Room</button>
-                    <p id="room-display" class="hidden">Your Room Code: <span id="room-id"></span></p>
-                </div>
-                <div class="card">
-                    <h2>Join a Room</h2>
-                    <div class="setup-inputs">
-                        <div class="input-group">
-                            <label>Room Code</label>
-                            <input type="text" id="join-room-input" placeholder="Enter Code">
-                        </div>
-                        <div id="join-password-group" class="input-group hidden">
-                            <label>Password</label>
-                            <input type="password" id="join-password" placeholder="Enter Password">
-                        </div>
-                    </div>
-                    <button id="join-room-btn">Join Room</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="loader" class="hidden">
-            <div class="spinner"></div>
-            <p id="loader-text">Processing...</p>
-        </div>
-
-        <div id="transfer-section" class="hidden">
-            <div class="transfer-grid">
-                <aside class="transfer-sidebar">
-                    <div class="card status-card">
-                        <div class="status-bar">
-                            <span id="connection-dot" class="dot"></span>
-                            <span id="role-badge" class="badge">Connecting...</span>
-                        </div>
-                        <div id="status" class="status-text">Connecting...</div>
-                    </div>
-                    
-                    <div class="card peers-card">
-                        <h3>Connected Peers</h3>
-                        <div id="peers-list" class="peers-list"></div>
-                    </div>
-
-                    <div id="chat-container" class="card chat-card hidden">
-                        <h3>Chat</h3>
-                        <div id="chat-messages"></div>
-                        <div class="chat-controls">
-                            <div class="toolbar-row">
-                                <div class="markup-toolbar">
-                                    <button type="button" class="markup-btn" data-markup="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
-                                    <button type="button" class="markup-btn" data-markup="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
-                                    <button type="button" class="markup-btn" data-markup="strike" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
-                                    <button type="button" class="markup-btn" data-markup="code" title="Code"><i class="fa-solid fa-code"></i></button>
-                                </div>
-                                <div class="suggestions-toolbar">
-                                    <button type="button" class="suggestion-btn">Hello! 👋</button>
-                                    <button type="button" class="suggestion-btn">Ready to send? 📁</button>
-                                    <button type="button" class="suggestion-btn">Thanks! ✨</button>
-                                    <button type="button" class="suggestion-btn">OK 👍</button>
-                                </div>
-                            </div>
-                            <div class="chat-input-group">
-                                <input type="text" id="chat-input" placeholder="Type a message...">
-                                <button id="chat-send">Send</button>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
-
-                <main class="transfer-main">
-                    <div class="card upload-card">
-                        <div class="drop-zone" id="drop-zone">
-                            <div class="drop-zone-content">
-                                <div class="upload-icon">📁</div>
-                                <p id="drop-zone-text">Drag & Drop file here or <span>browse</span></p>
-                            </div>
-                            <input type="file" id="file-input" hidden>
-                        </div>
-                    </div>
-
-                    <div id="progress-container" class="card progress-card hidden">
-                        <div class="file-info">
-                            <span id="file-name">Filename.ext</span>
-                            <span id="file-size">0 MB / 0 MB</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div id="progress-fill"></div>
-                        </div>
-                        <p id="progress-text">0%</p>
-                    </div>
-                </main>
-            </div>
-        </div>
-    </div>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="script.js"></script>
 </body>
-
 </html>

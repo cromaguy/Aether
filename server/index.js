@@ -13,6 +13,15 @@ app.use(express.static(path.join(__dirname, '../client')));
 
 const roomMetadata = new Map();
 
+function cleanupRoomMetadata(ioInstance) {
+  roomMetadata.forEach((value, key) => {
+    const room = ioInstance.sockets.adapter.rooms.get(key);
+    if (!room || room.size === 0) {
+      roomMetadata.delete(key);
+    }
+  });
+}
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
@@ -79,14 +88,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('leave-room', ({ roomID }) => {
+    if (!roomID) return;
+
+    socket.leave(roomID);
+    socket.to(roomID).emit('peer-left', { peerId: socket.id, roomID });
+    cleanupRoomMetadata(io);
+    console.log(`User ${socket.id} left room: ${roomID}`);
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    
-    roomMetadata.forEach((value, key) => {
-      if (!io.sockets.adapter.rooms.has(key)) {
-        roomMetadata.delete(key);
-      }
-    });
+    cleanupRoomMetadata(io);
   });
 });
 

@@ -1,6 +1,11 @@
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-const socket = isLocal ? io() : io('https://aether-jvts.onrender.com');const configuration = {
+// Use explicit websocket transport and sensible reconnection options for remote host
+const socket = isLocal
+    ? io()
+    : io('https://aether-jvts.onrender.com', { transports: ['websocket'], secure: true, reconnectionAttempts: 5 });
+
+const configuration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -48,6 +53,8 @@ const dropZoneText = document.getElementById('drop-zone-text');
 const fileInput = document.getElementById('file-input');
 const peersList = document.getElementById('peers-list');
 const chatContainer = document.getElementById('chat-container');
+const chatAttachBtn = document.getElementById('chat-attach');
+const chatFileInput = document.getElementById('chat-file-input');
 const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
@@ -62,7 +69,13 @@ const bufferLimitSelect = document.getElementById('buffer-limit-select');
 const autoDownloadToggle = document.getElementById('auto-download-toggle');
 const usernameInput = document.getElementById('username-input');
 const hostSettings = document.getElementById('host-settings');
-const disconnectPeerBtn = document.getElementById('disconnect-peer-btn');
+const disconnectRoomBtn = document.getElementById('disconnect-room-btn');
+const disconnectPeersSettingsBtn = document.getElementById('disconnect-peers-settings-btn');
+const clearHistoryBtn = document.getElementById('clear-history-btn');
+
+// Chat view connection indicators
+const connectionDotChat = document.getElementById('connection-dot-chat');
+const statusChat = document.getElementById('status-chat');
 
 const STATUS_MAP = {
     'creating-room': { layman: 'Initializing secure space...', tech: 'Emitting create-room event to signaling server...' },
@@ -104,43 +117,72 @@ function appendChatMessage(text, sender, type) {
     if (type === 'system') {
         msg.innerHTML = `<span>${formattedText}</span>`;
     } else {
+        // Hide redundant sender label for local 'Me' messages
+        const showSender = !(type === 'sent' && (sender === 'Me' || sender === settings.username));
         msg.innerHTML = `
-            <span class="sender">${sender}</span>
+            ${showSender ? `<span class="sender">${sender}</span>` : ''}
             <span class="text">${formattedText}</span>
             <span class="timestamp">${timestamp}</span>
         `;
     }
     
+    // Append to home view chat
     chatMessages.appendChild(msg);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Also append to dedicated chat view if it exists
+    const chatMessagesView = document.getElementById('chat-messages-view');
+    if (chatMessagesView) {
+        const msgClone = msg.cloneNode(true);
+        chatMessagesView.appendChild(msgClone);
+    }
+    
+    // Autoscroll to latest message in whichever view is visible
+    setTimeout(() => {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (chatMessagesView) {
+            chatMessagesView.scrollTop = chatMessagesView.scrollHeight;
+        }
+    }, 10);
+}
+
+function getChatMessageContainers() {
+    const containers = [];
+    if (chatMessages) containers.push(chatMessages);
+    const chatMessagesView = document.getElementById('chat-messages-view');
+    if (chatMessagesView) containers.push(chatMessagesView);
+    return containers;
 }
 
 function showTypingIndicator(name) {
-    let indicator = document.getElementById('typing-indicator');
-    
-    if (indicator) {
-        indicator.querySelector('.typing-text').textContent = `${name} is typing...`;
-        return;
-    }
-
-    indicator = document.createElement('div');
-    indicator.id = 'typing-indicator';
-    indicator.className = 'typing-indicator';
-    indicator.innerHTML = `
-        <span class="typing-text">${name} is typing...</span>
-        <div class="typing-dots">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-        </div>
-    `;
-    chatMessages.appendChild(indicator);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    const containers = getChatMessageContainers();
+    containers.forEach(container => {
+        let indicator = container.querySelector('.typing-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'typing-indicator';
+            indicator.innerHTML = `
+                <span class="typing-avatar"><i class="fas fa-ellipsis-h"></i></span>
+                <span class="typing-text">${name} is typing...</span>
+                <div class="typing-dots">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                </div>
+            `;
+            container.appendChild(indicator);
+        } else {
+            const text = indicator.querySelector('.typing-text');
+            if (text) text.textContent = `${name} is typing...`;
+        }
+        container.scrollTop = container.scrollHeight;
+    });
 }
 
 function hideTypingIndicator() {
-    const indicator = document.getElementById('typing-indicator');
-    if (indicator) indicator.remove();
+    getChatMessageContainers().forEach(container => {
+        const indicator = container.querySelector('.typing-indicator');
+        if (indicator) indicator.remove();
+    });
 }
 
 function updatePeersList() {
@@ -152,6 +194,69 @@ function updatePeersList() {
         item.textContent = name;
         peersList.appendChild(item);
     });
+    
+    // Also update peer count display in chat view
+    const peerCountDisplay = document.getElementById('peer-count-display');
+    if (peerCountDisplay) {
+        peerCountDisplay.textContent = peers.size;
+    }
+}
+
+function updateConnectionIndicators(connected) {
+    // Update all connection status indicators across views
+    if (connected) {
+        // Update home view connection dot
+        if (connectionDot) connectionDot.className = 'dot connected';
+        
+        // Update chat view connection dot and show chat content
+        if (connectionDotChat) {
+            connectionDotChat.className = 'dot connected';
+            if (statusChat) statusChat.textContent = 'Connected';
+        }
+        const chatContent = document.getElementById('chat-content');
+        const chatNotConnected = document.getElementById('chat-not-connected');
+        if (chatContent) chatContent.style.display = 'block';
+        if (chatNotConnected) chatNotConnected.style.display = 'none';
+        
+        // Update transfer view and show transfer content
+        const transferContent = document.getElementById('transfer-content');
+        const transferNotConnected = document.getElementById('transfer-not-connected');
+        if (transferContent) transferContent.style.display = 'block';
+        if (transferNotConnected) transferNotConnected.style.display = 'none';
+        
+        // Show transfer section, hide setup section in home view
+        if (setupSection) setupSection.classList.add('hidden');
+        if (transferSection) transferSection.classList.remove('hidden');
+        
+        // Show room info display
+        if (roomDisplay) roomDisplay.classList.remove('hidden');
+    } else {
+        // Update home view connection dot
+        if (connectionDot) connectionDot.className = 'dot disconnected';
+        
+        // Update chat view connection dot and hide chat content
+        if (connectionDotChat) {
+            connectionDotChat.className = 'dot disconnected';
+            if (statusChat) statusChat.textContent = 'Waiting for connection...';
+        }
+        const chatContent = document.getElementById('chat-content');
+        const chatNotConnected = document.getElementById('chat-not-connected');
+        if (chatContent) chatContent.style.display = 'none';
+        if (chatNotConnected) chatNotConnected.style.display = 'flex';
+        
+        // Update transfer view and show not-connected state
+        const transferContent = document.getElementById('transfer-content');
+        const transferNotConnected = document.getElementById('transfer-not-connected');
+        if (transferContent) transferContent.style.display = 'none';
+        if (transferNotConnected) transferNotConnected.style.display = 'flex';
+        
+        // Hide transfer section, show setup section in home view
+        if (setupSection) setupSection.classList.remove('hidden');
+        if (transferSection) transferSection.classList.add('hidden');
+        
+        // Hide room info display
+        if (roomDisplay) roomDisplay.classList.add('hidden');
+    }
 }
 
 function updateUIStatus(key, customLayman = null, customTech = null) {
@@ -181,35 +286,51 @@ function hideLoader() {
     if (handshakeTimer) clearTimeout(handshakeTimer);
 }
 
-settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
-closeSettings.onclick = () => settingsModal.classList.add('hidden');
-closeSettingsX.onclick = () => settingsModal.classList.add('hidden');
+if (settingsBtn && settingsModal) {
+    settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+}
+if (closeSettings && settingsModal) {
+    closeSettings.onclick = () => settingsModal.classList.add('hidden');
+}
+if (closeSettingsX && settingsModal) {
+    closeSettingsX.onclick = () => settingsModal.classList.add('hidden');
+}
 
 
-verboseToggle.onchange = (e) => {
-    settings.verbose = e.target.checked;
-    saveSettings();
-};
+if (verboseToggle) {
+    verboseToggle.onchange = (e) => {
+        settings.verbose = e.target.checked;
+        saveSettings();
+    };
+}
 
-usernameInput.oninput = (e) => {
-    settings.username = e.target.value.trim();
-    saveSettings();
-};
+if (usernameInput) {
+    usernameInput.oninput = (e) => {
+        settings.username = e.target.value.trim();
+        saveSettings();
+    };
+}
 
-chunkSizeSelect.onchange = (e) => {
-    settings.chunkSize = parseInt(e.target.value);
-    saveSettings();
-};
+if (chunkSizeSelect) {
+    chunkSizeSelect.onchange = (e) => {
+        settings.chunkSize = parseInt(e.target.value);
+        saveSettings();
+    };
+}
 
-bufferLimitSelect.onchange = (e) => {
-    settings.bufferLimit = parseInt(e.target.value);
-    saveSettings();
-};
+if (bufferLimitSelect) {
+    bufferLimitSelect.onchange = (e) => {
+        settings.bufferLimit = parseInt(e.target.value);
+        saveSettings();
+    };
+}
 
-autoDownloadToggle.onchange = (e) => {
-    settings.autoDownload = e.target.checked;
-    saveSettings();
-};
+if (autoDownloadToggle) {
+    autoDownloadToggle.onchange = (e) => {
+        settings.autoDownload = e.target.checked;
+        saveSettings();
+    };
+}
 
 document.querySelectorAll('.color-option').forEach(option => {
     option.onclick = () => {
@@ -223,21 +344,49 @@ document.querySelectorAll('.color-option').forEach(option => {
     };
 });
 
-disconnectPeerBtn.onclick = () => {
+function disconnectCurrentRoom() {
+    // Notify server that we're leaving
+    if (socket && currentRoomID) {
+        socket.emit('leave-room', { roomID: currentRoomID, role: userRole });
+    }
+    
     // For multi-peer, this would normally target a specific peer
     // For now, it clears all connections
     peers.forEach((peer, id) => {
         peer.pc.close();
     });
     peers.clear();
+    currentRoomID = null;
+    userRole = '';
     showSnackbar('All peers disconnected.', 'info');
     updatePeersList();
-    transferSection.classList.add('hidden');
-    setupSection.classList.remove('hidden');
     connectionDot.className = 'dot disconnected';
-    chatContainer.classList.add('hidden');
+    if (connectionDotChat) connectionDotChat.className = 'dot disconnected';
     chatMessages.innerHTML = '';
-};
+    
+    // Hide transfer section and show setup section
+    setupSection.classList.remove('hidden');
+    transferSection.classList.add('hidden');
+    
+    // Update connection state for currently visible view
+    const currentView = document.querySelector('.view-section:not(.hidden)');
+    if (currentView && currentView.id === 'transfer-view') {
+        updateConnectionState('transfer');
+    } else if (currentView && currentView.id === 'chat-view') {
+        updateConnectionState('chat');
+    }
+}
+
+if (disconnectRoomBtn) disconnectRoomBtn.onclick = disconnectCurrentRoom;
+if (disconnectPeersSettingsBtn) disconnectPeersSettingsBtn.onclick = disconnectCurrentRoom;
+
+if (clearHistoryBtn) {
+    clearHistoryBtn.onclick = () => {
+        localStorage.removeItem('aether_history');
+        loadHistoryView();
+        showSnackbar('Transfer history cleared.', 'info');
+    };
+}
 
 function saveSettings() {
     localStorage.setItem('aether_settings', JSON.stringify(settings));
@@ -361,21 +510,40 @@ socket.on('room-created', (roomID) => {
     userRole = 'Host/Sender';
     currentRoomID = roomID;
     
-    // Automatically transition UI to the transfer room
+    // Host must explicitly join its own room to receive peer-joined events
+    socket.emit('join-room', { roomID, password: '' });
+    
+    // Update UI to show room management
     setupSection.classList.add('hidden');
     transferSection.classList.remove('hidden');
-    hostSettings.classList.remove('hidden');
+    if (hostSettings) hostSettings.classList.remove('hidden');
     
     // Display Room ID in the status badge so it can still be shared
     const hostName = settings.username || 'Host';
     roleBadge.textContent = `${hostName}'s Room (ID: ${roomID})`;
+    
+    // Update room display
+    if (roomIdSpan) roomIdSpan.textContent = roomID;
+    if (roomDisplay) roomDisplay.classList.remove('hidden');
+    
     updateUIStatus('waiting-file', 'Waiting for peers to join...', 'Listening for peer connections...');
     
     showSnackbar(`Room created successfully! Code: ${roomID}`, 'success');
 });
 
 socket.on('joined-successfully', (roomID) => {
-    // Peer joined, now we wait for signals to create connections
+    userRole = 'Guest/Receiver';
+    currentRoomID = roomID;
+    
+    // Update UI to show room management
+    setupSection.classList.add('hidden');
+    transferSection.classList.remove('hidden');
+    
+    // Update room display
+    if (roomIdSpan) roomIdSpan.textContent = roomID;
+    if (roomDisplay) roomDisplay.classList.remove('hidden');
+    
+    console.log("Joined successfully, waiting for host offer.");
 });
 
 socket.on('error', (msg) => {
@@ -390,10 +558,19 @@ socket.on('peer-joined', ({ peerId, roomID }) => {
     createOffer(peerId); 
 });
 
+socket.on('peer-left', ({ peerId }) => {
+    const departingPeer = peers.get(peerId);
+    if (departingPeer) {
+        const name = departingPeer.username || getPeerName(peerId);
+        departingPeer.pc.close();
+        peers.delete(peerId);
+        updatePeersList();
+        appendChatMessage(`${name} left the room.`, 'System', 'system');
+    }
 
-socket.on('joined-successfully', (roomID) => {
-    userRole = 'Guest/Receiver';
-    console.log("Joined successfully, waiting for host offer.");
+    if (peers.size === 0) {
+        updateConnectionIndicators(false);
+    }
 });
 
 socket.on('signal', async ({ signal, from, roomID }) => {
@@ -419,12 +596,20 @@ socket.on('signal', async ({ signal, from, roomID }) => {
             await processIceQueue(from);
         } catch (e) { console.error('Answer fail', e); }
     } else if (signal.candidate) {
-        if (peer.pc.remoteDescription) {
-            await peer.pc.addIceCandidate(new RTCIceCandidate(signal));
-        } else {
-            if (!iceCandidateQueue.has(from)) iceCandidateQueue.set(from, []);
-            iceCandidateQueue.get(from).push(signal);
-        }
+        try {
+            let candidateObj = signal;
+            if (typeof signal.candidate === 'string') {
+                // Some senders stringify the candidate; normalize it.
+                try { candidateObj = { candidate: JSON.parse(signal.candidate).candidate, sdpMid: JSON.parse(signal.candidate).sdpMid, sdpMLineIndex: JSON.parse(signal.candidate).sdpMLineIndex }; } catch { candidateObj = signal; }
+            }
+
+            if (peer.pc.remoteDescription) {
+                await peer.pc.addIceCandidate(new RTCIceCandidate(candidateObj));
+            } else {
+                if (!iceCandidateQueue.has(from)) iceCandidateQueue.set(from, []);
+                iceCandidateQueue.get(from).push(candidateObj);
+            }
+        } catch (e) { console.error('ICE handling error', e); }
     }
 });
 
@@ -459,12 +644,20 @@ function setupDataChannelEvents(peerId, dc) {
             hideLoader();
             roleBadge.textContent = userRole;
             updateUIStatus('connected');
-            setupSection.classList.add('hidden');
-            transferSection.classList.remove('hidden');
             updateUIStatus('waiting-file');
             showSnackbar(`Connected to ${getPeerName(peerId)}`, 'success');
             updatePeersList();
-            chatContainer.classList.remove('hidden');
+            
+            // Update all connection indicators across views
+            updateConnectionIndicators(true);
+            
+            // Update connection state for currently visible views
+            const currentView = document.querySelector('.view-section:not(.hidden)');
+            if (currentView && currentView.id === 'transfer-view') {
+                updateConnectionState('transfer');
+            } else if (currentView && currentView.id === 'chat-view') {
+                updateConnectionState('chat');
+            }
         };
 
 
@@ -474,6 +667,18 @@ function setupDataChannelEvents(peerId, dc) {
         appendChatMessage(`${name} left the room`, 'System', 'system');
         peers.delete(peerId);
         updatePeersList();
+        
+        // Update connection state if no more peers
+        if (peers.size === 0) {
+            updateConnectionIndicators(false);
+            
+            const currentView = document.querySelector('.view-section:not(.hidden)');
+            if (currentView && currentView.id === 'transfer-view') {
+                updateConnectionState('transfer');
+            } else if (currentView && currentView.id === 'chat-view') {
+                updateConnectionState('chat');
+            }
+        }
     };
 
 
@@ -481,19 +686,36 @@ function setupDataChannelEvents(peerId, dc) {
         handleIncomingData(event.data, peerId);
         // BRIDGE TO WINUI
         if (window.chrome && window.chrome.webview) {
-            let data;
-            if (event.data instanceof ArrayBuffer) {
-                const bytes = new Uint8Array(event.data);
-                data = btoa(String.fromCharCode.apply(null, bytes));
-            } else {
-                data = btoa(event.data);
-            }
+                let data;
+                if (event.data instanceof ArrayBuffer) {
+                    const bytes = new Uint8Array(event.data);
+                    data = base64FromUint8Array(bytes);
+                } else {
+                    const encoder = new TextEncoder();
+                    const bytes = encoder.encode(event.data);
+                    data = base64FromUint8Array(bytes);
+                }
             window.chrome.webview.postMessage({
                 type: 'DATA_RECEIVED',
                 data: data
             });
         }
     };
+}
+
+// Safe base64 conversion for Uint8Array using chunking to avoid apply() limits
+function base64FromUint8Array(bytes) {
+    const CHUNK_SIZE = 0x8000; // 32KB chunks
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+        const slice = bytes.subarray(i, i + CHUNK_SIZE);
+        let chunk = '';
+        for (let k = 0; k < slice.length; k++) {
+            chunk += String.fromCharCode(slice[k]);
+        }
+        binary += chunk;
+    }
+    return btoa(binary);
 }
 
 function formatSize(bytes) {
@@ -517,7 +739,22 @@ async function sendFile(file) {
     }
 
     const fileMetadata = JSON.stringify({ name: file.name, size: file.size });
-    activePeers.forEach(([id, p]) => p.dc.send(fileMetadata));
+    let sendSuccess = false;
+    activePeers.forEach(([id, p]) => {
+        try {
+            if (p.dc.readyState === 'open') {
+                p.dc.send(fileMetadata);
+                sendSuccess = true;
+            }
+        } catch (e) {
+            console.error(`Failed to send metadata to peer ${id}:`, e);
+        }
+    });
+    
+    if (!sendSuccess) {
+        showSnackbar('Failed to send file metadata!', 'error');
+        return;
+    }
     
     appendChatMessage(`🚀 Started sending *${file.name}*`, 'System', 'system');
     
@@ -529,7 +766,7 @@ async function sendFile(file) {
     let offset = 0;
 
     const sendNextChunk = async () => {
-        const canSend = activePeers.every(([id, p]) => p.dc.bufferedAmount < settings.bufferLimit);
+        const canSend = activePeers.every(([id, p]) => p.dc && p.dc.readyState === 'open' && p.dc.bufferedAmount < settings.bufferLimit);
         if (!canSend) {
             setTimeout(sendNextChunk, 50);
             return;
@@ -538,7 +775,15 @@ async function sendFile(file) {
         if (offset < file.size) {
             const slice = file.slice(offset, offset + settings.chunkSize);
             reader.onload = (e) => {
-                activePeers.forEach(([id, p]) => p.dc.send(e.target.result));
+                activePeers.forEach(([id, p]) => {
+                    try {
+                        if (p.dc && p.dc.readyState === 'open') {
+                            p.dc.send(e.target.result);
+                        }
+                    } catch (err) {
+                        console.error(`Failed to send chunk to peer ${id}:`, err);
+                    }
+                });
                 offset += settings.chunkSize;
                 updateProgress(Math.min(100, Math.floor((offset / file.size) * 100)), offset, file.size);
                 sendNextChunk();
@@ -549,14 +794,45 @@ async function sendFile(file) {
             updateUIStatus('complete');
             showSnackbar('File sent to all peers!', 'success');
             appendChatMessage(`✅ *${file.name}* sent successfully!`, 'System', 'system');
+                    // Save to local history
+                    saveHistoryEntry(file.name, file.size);
         }
     };
     sendNextChunk();
 }
 
+function saveHistoryEntry(name, size) {
+    try {
+        const key = 'aether_history';
+        let arr = [];
+        const raw = localStorage.getItem(key);
+        if (raw) {
+            try { arr = JSON.parse(raw); } catch { arr = []; }
+        }
+        arr.unshift({ FileName: name, FileSize: size, Timestamp: new Date().toISOString() });
+        // keep last 200 entries
+        if (arr.length > 200) arr = arr.slice(0, 200);
+        localStorage.setItem(key, JSON.stringify(arr));
+    } catch (e) { console.error('Failed to save history', e); }
+}
+
 function handleIncomingData(data, peerId) {
     console.log(`Received data from peer ${peerId}, type: ${typeof data}, length: ${data.byteLength || data.length}`);
-    
+    // If data is binary (ArrayBuffer/Uint8Array), attempt to detect if it's UTF-8 text (chat/typing/metadata)
+    if (!(typeof data === 'string')) {
+        try {
+            const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : (data instanceof Uint8Array ? data : null);
+            if (bytes) {
+                const maxProbe = Math.min(1024, bytes.length);
+                const prefix = new TextDecoder().decode(bytes.subarray(0, maxProbe));
+                if (prefix.startsWith('CHAT:') || prefix.startsWith('TYPING:') || prefix.startsWith('USER_INFO:') || (prefix.startsWith('{') && prefix.includes('"name"') && prefix.includes('"size"'))) {
+                    // Treat as text message/metadata
+                    data = new TextDecoder().decode(bytes);
+                }
+            }
+        } catch (e) { console.error('Text probe failed', e); }
+    }
+
         if (typeof data === 'string') {
             if (data.startsWith('CHAT:')) {
                 const msg = data.substring(5);
@@ -589,6 +865,16 @@ function handleIncomingData(data, peerId) {
     }
 
     let metadata = null;
+    
+    // Try to parse incoming data as JSON metadata
+    if (typeof data === 'string') {
+        try {
+            const parsed = JSON.parse(data);
+            if (parsed && typeof parsed.name === 'string' && typeof parsed.size === 'number' && parsed.size > 0) {
+                metadata = parsed;
+            }
+        } catch (e) { /* not JSON metadata */ }
+    }
     
     if (metadata) {
 
@@ -628,6 +914,8 @@ function handleIncomingData(data, peerId) {
             updateUIStatus('complete');
             showSnackbar('File received successfully!', 'success');
             appendChatMessage(`✅ Received *${receivingFileName}*`, 'System', 'system');
+                // Save to local history
+                saveHistoryEntry(receivingFileName, currentSize);
             
             // Reset after completion
 
@@ -703,16 +991,119 @@ function sendChatMessage() {
         return;
     }
 
-    const chatMsg = `CHAT:${text}`;
-    activePeers.forEach(([id, p]) => p.dc.send(chatMsg));
+    // Show message immediately (optimistic UI)
     appendChatMessage(text, 'Me', 'sent');
     chatInput.value = '';
+    
+    // Send in background
+    const chatMsg = `CHAT:${text}`;
+    activePeers.forEach(([id, p]) => {
+        try {
+            p.dc.send(chatMsg);
+        } catch (e) {
+            console.error('Error sending chat:', e);
+            showSnackbar('Failed to send message', 'error');
+        }
+    });
 }
 
 chatSend.onclick = sendChatMessage;
 chatInput.onkeypress = (e) => {
     if (e.key === 'Enter') sendChatMessage();
 };
+
+// Chat view input handlers (for dedicated chat page)
+const chatSendView = document.getElementById('chat-send-view');
+const chatInputView = document.getElementById('chat-input-view');
+if (chatSendView && chatInputView) {
+    chatSendView.onclick = () => {
+        const text = chatInputView.value.trim();
+        if (!text) return;
+
+        const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
+        if (activePeers.length === 0) {
+            showSnackbar('No connected peers to chat with!', 'error');
+            return;
+        }
+
+        // Show message immediately (optimistic UI)
+        appendChatMessage(text, 'Me', 'sent');
+        chatInputView.value = '';
+        
+        // Send in background
+        const chatMsg = `CHAT:${text}`;
+        activePeers.forEach(([id, p]) => {
+            try {
+                p.dc.send(chatMsg);
+            } catch (e) {
+                console.error('Error sending chat:', e);
+                showSnackbar('Failed to send message', 'error');
+            }
+        });
+    };
+    
+    chatInputView.onkeypress = (e) => {
+        if (e.key === 'Enter') {
+            const text = chatInputView.value.trim();
+            if (!text) return;
+
+            const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
+            if (activePeers.length === 0) {
+                showSnackbar('No connected peers to chat with!', 'error');
+                return;
+            }
+
+            appendChatMessage(text, 'Me', 'sent');
+            chatInputView.value = '';
+            
+            const chatMsg = `CHAT:${text}`;
+            activePeers.forEach(([id, p]) => {
+                try {
+                    p.dc.send(chatMsg);
+                } catch (e) {
+                    console.error('Error sending chat:', e);
+                    showSnackbar('Failed to send message', 'error');
+                }
+            });
+        }
+    };
+    
+    chatInputView.oninput = () => {
+        const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
+        if (activePeers.length === 0) return;
+
+        activePeers.forEach(([id, p]) => p.dc.send('TYPING:'));
+    };
+}
+
+// Chat attach support
+if (chatAttachBtn && chatFileInput) {
+    chatAttachBtn.onclick = () => chatFileInput.click();
+    chatFileInput.onchange = (e) => {
+        const f = e.target.files ? e.target.files[0] : null;
+        if (f) {
+            appendChatMessage(`Sending file: ${f.name}`, 'Me', 'sent');
+            sendFile(f);
+        }
+        // clear selection
+        chatFileInput.value = '';
+    };
+}
+
+// Chat view attach support (for dedicated chat page view)
+const chatAttachViewBtn = document.getElementById('chat-attach-view');
+const chatFileInputView = document.getElementById('chat-file-input-view');
+if (chatAttachViewBtn && chatFileInputView) {
+    chatAttachViewBtn.onclick = () => chatFileInputView.click();
+    chatFileInputView.onchange = (e) => {
+        const f = e.target.files ? e.target.files[0] : null;
+        if (f) {
+            appendChatMessage(`Sending file: ${f.name}`, 'Me', 'sent');
+            sendFile(f);
+        }
+        chatFileInputView.value = '';
+    };
+}
 
 chatInput.oninput = () => {
     const activePeers = Array.from(peers.entries()).filter(([id, p]) => p.dc && p.dc.readyState === 'open');
@@ -722,24 +1113,190 @@ chatInput.oninput = () => {
 };
 
 dropZone.onclick = () => fileInput.click();
-fileInput.onchange = (e) => {
-    if (e.target.files[0]) sendFile(e.target.files[0]);
-};
+if (dropZone && fileInput) {
+    dropZone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+        if (e.target.files[0]) sendFile(e.target.files[0]);
+    };
 
-dropZone.ondragover = (e) => {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
-};
+    dropZone.ondragover = (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    };
 
-dropZone.ondragleave = () => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-};
+    dropZone.ondragleave = () => {
+        dropZone.classList.remove('drag-over');
+    };
 
-dropZone.ondrop = (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    if (e.dataTransfer.files[0]) sendFile(e.dataTransfer.files[0]);
-};
+    dropZone.ondrop = (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        if (e.dataTransfer.files[0]) sendFile(e.dataTransfer.files[0]);
+    };
+}
 
 loadSettings();
+
+// ===== CONNECTION STATE CHECK =====
+function isConnected() {
+    return currentRoomID && peers.size > 0;
+}
+
+function updateConnectionState(page) {
+    if (page === 'transfer') {
+        const transferContent = document.getElementById('transfer-content');
+        const transferNotConnected = document.getElementById('transfer-not-connected');
+        
+        if (transferContent && transferNotConnected) {
+            if (isConnected()) {
+                transferNotConnected.style.display = 'none';
+                transferContent.style.display = 'block';
+            } else {
+                transferNotConnected.style.display = 'flex';
+                transferContent.style.display = 'none';
+            }
+        }
+    } else if (page === 'chat') {
+        const chatContent = document.getElementById('chat-content');
+        const chatNotConnected = document.getElementById('chat-not-connected');
+        
+        if (chatContent && chatNotConnected) {
+            if (isConnected()) {
+                chatNotConnected.style.display = 'none';
+                chatContent.style.display = 'block';
+            } else {
+                chatNotConnected.style.display = 'flex';
+                chatContent.style.display = 'none';
+            }
+        }
+    }
+}
+
+// ===== SPA NAVIGATION =====
+function navigateTo(page) {
+    // Hide all views
+    document.querySelectorAll('.view-section').forEach(view => view.classList.add('hidden'));
+    
+    // Show the requested view
+    const viewMap = {
+        'home': 'home-view',
+        'transfer': 'transfer-view',
+        'chat': 'chat-view',
+        'history': 'history-view',
+        'settings': 'settings-view'
+    };
+    
+    const viewId = viewMap[page];
+    if (viewId) {
+        const viewElement = document.getElementById(viewId);
+        if (viewElement) {
+            viewElement.classList.remove('hidden');
+        }
+    }
+    
+    // Update navigation highlights
+    document.querySelectorAll('.nav-bottom-item, .rail-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll(`[data-page="${page}"]`).forEach(el => el.classList.add('active'));
+    
+    // Handle special view logic
+    if (page === 'chat') {
+        // Sync room display in chat view
+        const roomDisplay = document.getElementById('current-room-display');
+        if (roomDisplay && currentRoomID) {
+            roomDisplay.textContent = currentRoomID;
+        } else if (roomDisplay) {
+            roomDisplay.textContent = 'Not Connected';
+        }
+        // Check connection state for chat view
+        updateConnectionState('chat');
+    } else if (page === 'transfer') {
+        // Check connection state for transfer view
+        updateConnectionState('transfer');
+    } else if (page === 'history') {
+        // Load and display history
+        loadHistoryView();
+    } else if (page === 'settings') {
+        // Populate settings when opening
+        if (typeof loadSettings === 'function') loadSettings();
+    }
+}
+
+function loadHistoryView() {
+    const historyList = document.getElementById('history-list');
+    const raw = localStorage.getItem('aether_history');
+    if (!raw) {
+        historyList.innerHTML = '<p class="muted">No history yet.</p>';
+        return;
+    }
+
+    try {
+        const items = JSON.parse(raw);
+        if (!items || items.length === 0) {
+            historyList.innerHTML = '<p class="muted">No history yet.</p>';
+            return;
+        }
+
+        historyList.innerHTML = '';
+        items.forEach(it => {
+            const el = document.createElement('div');
+            el.className = 'history-item';
+            const date = new Date(it.Timestamp);
+            const formattedDate = date.toLocaleString();
+            const fileSize = formatSize(it.FileSize);
+            el.style.cssText = `
+                padding: 1rem 1.5rem;
+                border-radius: 12px;
+                border: 1px solid var(--input-border);
+                background: var(--card-bg);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 1rem;
+                margin-bottom: 0.75rem;
+                transition: all 0.2s ease;
+                cursor: pointer;
+            `;
+            el.onmouseover = () => el.style.background = 'var(--hover-bg)';
+            el.onmouseout = () => el.style.background = 'var(--card-bg)';
+
+            const fileInfo = document.createElement('div');
+            fileInfo.style.cssText = 'flex: 1;';
+            fileInfo.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 0.25rem; color: var(--text-color);">${it.FileName}</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">${formattedDate} • ${fileSize}</div>
+            `;
+
+            const icon = document.createElement('div');
+            icon.style.cssText = 'color: var(--accent-color); font-size: 1.2rem;';
+            icon.innerHTML = '<i class="fas fa-check-circle"></i>';
+
+            el.appendChild(fileInfo);
+            el.appendChild(icon);
+            historyList.appendChild(el);
+        });
+    } catch (e) {
+        console.error('Failed to load history:', e);
+        historyList.innerHTML = '<p class="muted">No history yet.</p>';
+    }
+}
+
+// Navigation highlighting and behavior
+function initNavigation() {
+    // Setup navigation click handlers for SPA
+    document.querySelectorAll('[data-page]').forEach(navItem => {
+        navItem.onclick = (e) => {
+            e.preventDefault();
+            const page = navItem.getAttribute('data-page');
+            navigateTo(page);
+        };
+    });
+
+    // Wire settings buttons
+    const settingsBtnTop = document.getElementById('settings-btn');
+    if (settingsBtnTop) settingsBtnTop.onclick = () => document.getElementById('settings-modal').classList.remove('hidden');
+    
+    // Show home view by default
+    navigateTo('home');
+}
+
+initNavigation();
