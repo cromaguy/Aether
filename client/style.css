@@ -323,6 +323,13 @@ h1 {
     margin-bottom: 1rem;
 }
 
+#chat-messages-view {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+
 .chat-msg {
     font-size: 0.9rem;
     padding: 10px 14px;
